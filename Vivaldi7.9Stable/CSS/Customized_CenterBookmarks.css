@@ -1,0 +1,9 @@
+/* Center Vivaldi Bookmark Bar */
+
+.bookmark-bar .observer {
+    justify-content: center;
+}
+
+.bookmark-bar {
+    justify-content: center;
+}
