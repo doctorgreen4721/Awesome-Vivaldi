@@ -1,6 +1,14 @@
+// ==UserScript==
+// @name         Quick Capture
+// @description  Captures the hovered element region using clipboard, file, or Vivaldi screenshot selection modes.
+// @version      2026.4.17
+// @author       Tam710562, maubg, PaRr0tBoY
+// ==/UserScript==
+
 /*
  * Quick Capture
  * Based on Element Capture by Tam710562
+ * Animation is based on Zen Browser by maubg
  */
 
 (() => {
@@ -138,7 +146,17 @@
   let pointerDownEvent = null;
   let isCapturing = false;
   let activeCaptureArea = null;
+  let nativeSelectorCaptureArea = null;
+  let nativeSelectorMonitor = null;
   let captureSessionId = 0;
+  const nativeCaptureAreaStyleState = new WeakMap();
+  const nativeCaptureAreaStyleProps = [
+    'background',
+    'border-color',
+    'border-width',
+    'visibility',
+    'pointer-events',
+  ];
   const captureAreaId = 'capture-area';
   const captureOverlayId = 'quick-capture-overlay';
   const captureStyleId = 'quick-capture-style';
@@ -214,7 +232,7 @@
         display: 'none',
         boxSizing: 'border-box',
         border: '2px solid rgba(255, 255, 255, 0.4)',
-        boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.3) inset',
+        boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.3) inset',
         borderRadius: '6px',
         transition: 'left 0.1s ease, top 0.1s ease, width 0.1s ease, height 0.1s ease',
       });
@@ -279,8 +297,32 @@
   function restoreCaptureOverlayShade() {
     const overlay = document.getElementById(captureOverlayId);
     if (overlay) {
-      overlay.style.boxShadow = '0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.3) inset';
+      overlay.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, 0.3) inset';
     }
+  }
+
+  function rememberNativeCaptureAreaStyle(captureArea, property) {
+    if (!captureArea?.style || !nativeCaptureAreaStyleProps.includes(property)) {
+      return;
+    }
+
+    const state = nativeCaptureAreaStyleState.get(captureArea) || {};
+    if (!Object.prototype.hasOwnProperty.call(state, property)) {
+      state[property] = {
+        value: captureArea.style.getPropertyValue(property),
+        priority: captureArea.style.getPropertyPriority(property),
+      };
+    }
+    nativeCaptureAreaStyleState.set(captureArea, state);
+  }
+
+  function setNativeCaptureAreaStyle(captureArea, property, value, priority = '') {
+    if (!captureArea?.style) {
+      return;
+    }
+
+    rememberNativeCaptureAreaStyle(captureArea, property);
+    captureArea.style.setProperty(property, value, priority);
   }
 
   function makeNativeCaptureAreaTransparent(captureArea) {
@@ -288,18 +330,9 @@
       return;
     }
 
-    captureArea.style.background = 'transparent';
-    captureArea.style.borderColor = 'transparent';
-    captureArea.style.borderWidth = '0';
-  }
-
-  function hideNativeCaptureAreaShade(captureArea) {
-    if (!captureArea?.style) {
-      return;
-    }
-
-    captureArea.style.background = 'transparent';
-    captureArea.style.borderColor = 'transparent';
+    setNativeCaptureAreaStyle(captureArea, 'background', 'transparent');
+    setNativeCaptureAreaStyle(captureArea, 'border-color', 'transparent');
+    setNativeCaptureAreaStyle(captureArea, 'border-width', '0');
   }
 
   function restoreNativeCaptureArea(captureArea) {
@@ -307,15 +340,25 @@
       return;
     }
 
-    captureArea.style.removeProperty('background');
-    captureArea.style.removeProperty('border-color');
-    captureArea.style.removeProperty('border-width');
-    captureArea.style.removeProperty('visibility');
-    captureArea.style.removeProperty('pointer-events');
+    const state = nativeCaptureAreaStyleState.get(captureArea);
+    if (!state) {
+      return;
+    }
+
+    Object.keys(state).forEach((property) => {
+      const propertyState = state[property];
+      if (propertyState?.value) {
+        captureArea.style.setProperty(property, propertyState.value, propertyState.priority || '');
+      } else {
+        captureArea.style.removeProperty(property);
+      }
+    });
+    nativeCaptureAreaStyleState.delete(captureArea);
   }
 
   function cleanupCaptureListeners(captureArea) {
     if (captureArea) {
+      captureArea.removeEventListener('pointerdown', pointerDownEventHandler, true);
       captureArea.removeEventListener('pointermove', pointerMoveEventHandler, true);
       captureArea.removeEventListener('pointerup', pointerUpEventHandler, true);
       captureArea.removeEventListener('pointerleave', pointerLeaveEventHandler, true);
@@ -326,25 +369,81 @@
     }
   }
 
+  function clearNativeSelectorMonitor(captureArea) {
+    if (nativeSelectorMonitor) {
+      clearInterval(nativeSelectorMonitor);
+      nativeSelectorMonitor = null;
+    }
+    if (!captureArea || nativeSelectorCaptureArea === captureArea) {
+      nativeSelectorCaptureArea = null;
+    }
+    restoreNativeCaptureArea(captureArea);
+    hideCaptureOverlay();
+    restoreCaptureOverlayShade();
+  }
+
+  function armCaptureArea(captureArea) {
+    if (nativeSelectorCaptureArea && isCaptureAreaInactive(nativeSelectorCaptureArea)) {
+      clearNativeSelectorMonitor(nativeSelectorCaptureArea);
+    }
+
+    if (!captureArea || nativeSelectorCaptureArea === captureArea || activeCaptureArea === captureArea) {
+      return;
+    }
+
+    cleanupCaptureListeners(activeCaptureArea);
+    rect = null;
+    pointerDownEvent = null;
+    isCapturing = false;
+    activeCaptureArea = captureArea;
+    captureSessionId += 1;
+    hideCaptureOverlay();
+    restoreCaptureOverlayShade();
+    restoreNativeCaptureArea(captureArea);
+
+    document.addEventListener('keydown', keyDownEventHandler, true);
+    captureArea.addEventListener('pointerdown', pointerDownEventHandler, { once: true, capture: true });
+    captureArea.addEventListener('pointermove', pointerMoveEventHandler, true);
+    captureArea.addEventListener('pointerup', pointerUpEventHandler, true);
+    captureArea.addEventListener('pointerleave', pointerLeaveEventHandler, true);
+  }
+
+  function isCaptureAreaInactive(captureArea) {
+    if (!captureArea?.isConnected || captureArea.hidden) {
+      return true;
+    }
+
+    const style = window.getComputedStyle(captureArea);
+    return style.visibility === 'hidden' || style.display === 'none';
+  }
+
   function isActiveCaptureSession(captureArea, sessionId) {
     return activeCaptureArea === captureArea && captureSessionId === sessionId;
   }
 
   function monitorNativeCaptureEnd(captureArea) {
     let attempts = 0;
-    const interval = setInterval(() => {
+    nativeSelectorCaptureArea = captureArea;
+    if (nativeSelectorMonitor) {
+      clearInterval(nativeSelectorMonitor);
+    }
+
+    const monitor = setInterval(() => {
+      if (nativeSelectorMonitor !== monitor) {
+        clearInterval(monitor);
+        return;
+      }
+
       attempts += 1;
-      if (!captureArea?.isConnected || captureArea.style.visibility === 'hidden' || attempts > 1200) {
-        clearInterval(interval);
-        hideCaptureOverlay();
-        restoreCaptureOverlayShade();
-      } else {
-        hideNativeCaptureAreaShade(captureArea);
+      if (getCaptureMode() !== 'area' || isCaptureAreaInactive(captureArea) || attempts > 1200) {
+        clearNativeSelectorMonitor(captureArea);
       }
     }, 100);
+
+    nativeSelectorMonitor = monitor;
   }
 
-  async function closeCaptureArea(captureArea) {
+  async function closeCaptureArea(captureArea, restoreAfterDelay = true) {
     hideCaptureOverlay();
     restoreCaptureOverlayShade();
     cleanupCaptureListeners(captureArea);
@@ -362,11 +461,14 @@
     }
 
     if (captureArea?.style) {
-      captureArea.style.visibility = 'hidden';
-      captureArea.style.pointerEvents = 'none';
+      setNativeCaptureAreaStyle(captureArea, 'visibility', 'hidden');
+      setNativeCaptureAreaStyle(captureArea, 'pointer-events', 'none');
     }
 
     await gnoh.promise.delay(captureDelay);
+    if (restoreAfterDelay) {
+      restoreNativeCaptureArea(captureArea);
+    }
   }
 
   function keyDownEventHandler(event) {
@@ -407,12 +509,12 @@
 
   async function simulateSelect(captureArea, retryCount = 0) {
     if (!captureArea || !captureArea.parentElement || !rect) {
-      return;
+      return false;
     }
 
     const captureAreaProps = getCaptureAreaProps(captureArea);
     if (!captureAreaProps?.onPointerDown || !captureAreaProps?.onPointerMove || !captureAreaProps?.onPointerUp) {
-      return;
+      return false;
     }
 
     captureAreaProps.onPointerDown(new PointerEvent('pointerdown', {
@@ -425,7 +527,6 @@
       clientY: rect.top,
       pointerId: 1,
     }));
-    hideNativeCaptureAreaShade(captureArea);
 
     await gnoh.promise.delay(10);
     captureAreaProps.onPointerMove(new PointerEvent('pointermove', {
@@ -437,7 +538,6 @@
       clientX: rect.right,
       clientY: rect.bottom,
     }));
-    hideNativeCaptureAreaShade(captureArea);
 
     await gnoh.promise.delay(10);
     captureAreaProps.onPointerUp(new PointerEvent('pointerup', {
@@ -448,22 +548,21 @@
       pointerType: 'mouse',
       pointerId: 1,
     }));
-    hideNativeCaptureAreaShade(captureArea);
 
     await gnoh.promise.delay(10);
     const style = window.getComputedStyle(captureArea);
+    const selectionMismatch = [
+      [rect.top, parseFloat(style.borderTopWidth)],
+      [rect.left, parseFloat(style.borderLeftWidth)],
+      [window.innerHeight - rect.bottom, parseFloat(style.borderBottomWidth)],
+      [window.innerWidth - rect.right, parseFloat(style.borderRightWidth)],
+    ].some(([expected, actual]) => Number.isFinite(actual) && Math.abs(expected - actual) >= 10);
 
-    if (
-      retryCount < 3
-      && (
-        Math.abs(rect.top - parseFloat(style.borderTopWidth)) >= 10
-        || Math.abs(rect.left - parseFloat(style.borderLeftWidth)) >= 10
-        || Math.abs(window.innerHeight - rect.bottom - parseFloat(style.borderBottomWidth)) >= 10
-        || Math.abs(window.innerWidth - rect.right - parseFloat(style.borderRightWidth)) >= 10
-      )
-    ) {
-      await simulateSelect(captureArea, retryCount + 1);
+    if (selectionMismatch && retryCount < 3) {
+      return simulateSelect(captureArea, retryCount + 1);
     }
+
+    return !selectionMismatch;
   }
 
   async function delegateToVivaldiSelector(captureArea) {
@@ -476,8 +575,17 @@
     try {
       cleanupCaptureListeners(captureArea);
       restoreNativeCaptureArea(captureArea);
-      await simulateSelect(captureArea);
-      hideNativeCaptureAreaShade(captureArea);
+      const didSelect = await simulateSelect(captureArea);
+      if (!didSelect) {
+        restoreNativeCaptureArea(captureArea);
+        hideCaptureOverlay();
+        restoreCaptureOverlayShade();
+        console.warn('[QuickCapture] Failed to select region in Vivaldi screenshot selector');
+        return;
+      }
+      restoreNativeCaptureArea(captureArea);
+      hideCaptureOverlay();
+      restoreCaptureOverlayShade();
       monitorNativeCaptureEnd(captureArea);
       console.info('[QuickCapture] Delegated selected region to Vivaldi screenshot selector');
     } catch (error) {
@@ -499,12 +607,13 @@
     const params = rectToCaptureParams(rect, mode);
 
     try {
-      await closeCaptureArea(captureArea);
+      await closeCaptureArea(captureArea, false);
       await captureUI(params);
       console.info(`[QuickCapture] Captured region in ${mode} mode`, params);
     } catch (error) {
       console.error('[QuickCapture] Failed to capture region', error);
     } finally {
+      restoreNativeCaptureArea(captureArea);
       isCapturing = false;
       rect = null;
       pointerDownEvent = null;
@@ -597,6 +706,7 @@
       const captureAreaProps = getCaptureAreaProps(this);
       hideCaptureOverlay();
       restoreCaptureOverlayShade();
+      restoreNativeCaptureArea(this);
       captureAreaProps?.onPointerDown?.(pointerDownEvent);
       return;
     }
@@ -619,6 +729,12 @@
     }
 
     cleanupCaptureListeners(this);
+    if (!rect) {
+      hideCaptureOverlay();
+      restoreCaptureOverlayShade();
+      restoreNativeCaptureArea(this);
+      return;
+    }
 
     if (getQuickCaptureMode() === 'default') {
       await delegateToVivaldiSelector(this);
@@ -631,10 +747,9 @@
     event.preventDefault();
     event.stopPropagation();
 
-    this.style.removeProperty('background');
-    this.style.removeProperty('border-width');
     hideCaptureOverlay();
     restoreCaptureOverlayShade();
+    restoreNativeCaptureArea(this);
     cleanupCaptureListeners(this);
   }
 
@@ -656,19 +771,7 @@
 
   gnoh.override(HTMLDivElement.prototype, 'appendChild', async (element) => {
     if (element.id === captureAreaId) {
-      rect = null;
-      pointerDownEvent = null;
-      isCapturing = false;
-      activeCaptureArea = element;
-      captureSessionId += 1;
-      hideCaptureOverlay();
-      restoreCaptureOverlayShade();
-
-      document.addEventListener('keydown', keyDownEventHandler, true);
-      element.addEventListener('pointerdown', pointerDownEventHandler, { once: true, capture: true });
-      element.addEventListener('pointermove', pointerMoveEventHandler, true);
-      element.addEventListener('pointerup', pointerUpEventHandler, true);
-      element.addEventListener('pointerleave', pointerLeaveEventHandler, true);
+      armCaptureArea(element);
     }
   });
 })();
