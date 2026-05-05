@@ -71,6 +71,7 @@
   z-index: 1;
   overflow: hidden;
   border-radius: inherit;
+  transition: opacity 0.2s ease;
 }
 
 #browser #webpage-stack {
@@ -273,6 +274,19 @@ body.peek-open #browser #webpage-stack {
     overflow: hidden;
     border-radius: var(--radius);
   }
+}
+
+/* Nebula Mode 5 — progressive filter on peek-content */
+.peek-container .peek-panel.peek-nebula-loading .peek-content {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: none;
+  filter: saturate(0%) brightness(75%) blur(4px);
+}
+
+/* Nebula: keep dark background to fill gaps around screenshot */
+.peek-container .peek-panel.peek-nebula-loading > .peek-source-preview::before {
+  opacity: 0;
 }
 
 .peek-container .peek-source-preview {
