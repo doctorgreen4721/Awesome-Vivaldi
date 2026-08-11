@@ -9527,6 +9527,7 @@
   }
 
   waitForBrowser(() => {
+    injectStyles();
     VividAI.loadConfig({ modKey: "askInPage" });
     window.addEventListener('ask-in-page-config-updated', (e) => {
       VividAI.applyConfig(e.detail || {});
