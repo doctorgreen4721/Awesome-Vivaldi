@@ -5,7 +5,8 @@
 # @version      2026.7.14
 # @author       Ryan (Acid)
 # @website      https://github.com/PaRr0tBoY/Awesome-Vivaldi
-# @usage        curl -fsSL https://raw.githubusercontent.com/PaRr0tBoY/Awesome-Vivaldi/main/install.sh | bash
+# @usage        macOS: curl -fsSL https://raw.githubusercontent.com/PaRr0tBoY/Awesome-Vivaldi/main/install.sh | bash
+# @usage        Linux: curl -fsSL https://raw.githubusercontent.com/PaRr0tBoY/Awesome-Vivaldi/main/install.sh | sudo bash
 # ==/UserScript==
 #
 # Requirements: bash 3.2+, curl, tput, grep, sed
@@ -24,6 +25,10 @@ fi
 SOURCE_DIR=""; TEMP_DIR=""; BANNER_LINES=7; LAST_FRAME_LINES=0
 ESC=$(printf '\033')
 HEADLESS=${HEADLESS:-0}
+# bash 4.0+ accepts fractional `read -t`; bash 3.2 (macOS system bash) rejects
+# them outright, which silently swallowed the escape tail of every arrow key.
+# Only unbound keys (bare ESC) ever hit this timeout, so 1s costs nothing.
+if [ "${BASH_VERSINFO[0]}" -ge 4 ]; then KEY_TIMEOUT=0.01; else KEY_TIMEOUT=1; fi
 KEY_SEQ=(); KEY_IDX=0
 CRASH_LINE=0; CRASH_CMD=""
 EXIT_FLAG_FILE="${TMPDIR:-/tmp}/awesome-vivaldi-exit.$$"
@@ -50,15 +55,18 @@ trap on_err ERR
 tty_printf() { [ "$HEADLESS" = "1" ] && return 0; { printf "$@" > /dev/tty; } 2>/dev/null || printf "$@"; }
 
 cleanup() {
+    local exit_code=$?
     { [ -c /dev/tty ] && stty echo icanon < /dev/tty; } 2>/dev/null || true
     tput cnorm 2>/dev/null || true
-    if [ "$EXIT_REQUESTED" = "1" ]; then
-        :  # User-requested exit, no FATAL message
-    elif [ "$CRASH_LINE" != "0" ]; then
-        printf "\n[FATAL line %d] %s\n" "$CRASH_LINE" "$CRASH_CMD"
-        tty_printf "\n${ESC}[1;31m[FATAL line %d] %s${ESC}[0m\n" "$CRASH_LINE" "$CRASH_CMD"
-    else
+    if [ "$EXIT_REQUESTED" = "1" ] || [ "$exit_code" -eq 0 ]; then
         tty_printf "${ESC}[%d;0H${ESC}[0J${ESC}[H" "$((BANNER_LINES + 1))"
+    else
+        printf "\n[FATAL line %d] %s (exit code %d)\n" "$CRASH_LINE" "$CRASH_CMD" "$exit_code"
+        tty_printf "\n${ESC}[1;31m[FATAL line %d] %s (exit code %d)${ESC}[0m\n" "$CRASH_LINE" "$CRASH_CMD" "$exit_code"
+        if [ "$HEADLESS" != "1" ] && [ -c /dev/tty ]; then
+            tty_printf "\n  Press any key to exit...\n"
+            read -rsn1 _ < /dev/tty 2>/dev/null || true
+        fi
     fi
     [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
     rm -f "$EXIT_FLAG_FILE"
@@ -162,7 +170,7 @@ tr() {
             restore_fresh)            echo "否 — 全新安装" ;;
             restore_copying)          echo "正在从持久化存储恢复模组..." ;;
             restore_done)             echo "已从旧版本恢复 {0} CSS + {1} JS 模组." ;;
-            error_admin_required)     echo "需要管理员权限." ;;
+            error_admin_required)     echo "需要管理员权限. 请使用 sudo 重新运行程序:" ;;
             error_download)           echo "错误: 无法下载模组包. 请检查网络连接." ;;
             error_extract)            echo "错误: 无法解压模组包." ;;
             error_no_source)          echo "错误: 找不到模组源文件." ;;
@@ -306,7 +314,7 @@ tr() {
             restore_fresh)            echo "No — start fresh" ;;
             restore_copying)          echo "Restoring mods from persistent storage..." ;;
             restore_done)             echo "Restored {0} CSS + {1} JS mods from previous version." ;;
-            error_admin_required)     echo "Administrator privileges required." ;;
+            error_admin_required)     echo "Administrator privileges required. Please re-run using:" ;;
             error_download)           echo "ERROR: Failed to download modpack. Check your internet connection." ;;
             error_extract)            echo "ERROR: Failed to extract modpack archive." ;;
             error_no_source)          echo "ERROR: Could not locate mod source files." ;;
@@ -385,7 +393,7 @@ is_default_off() {
 # ============================================================
 
 show_banner() {
-    clear
+    clear 2>/dev/null || true
     echo ""
     echo "▄████▄ ▄▄   ▄▄ ▄▄▄▄▄  ▄▄▄▄  ▄▄▄  ▄▄   ▄▄ ▄▄▄▄▄   ██  ██ ▄▄ ▄▄ ▄▄  ▄▄▄  ▄▄    ▄▄▄▄  ▄▄"
     echo "██▄▄██ ██ ▄ ██ ██▄▄  ███▄▄ ██▀██ ██▀▄▀██ ██▄▄    ██▄▄██ ██ ██▄██ ██▀██ ██    ██▀██ ██"
@@ -406,9 +414,11 @@ write_frame() {
     local row=$((BANNER_LINES + 1))
     local line_count=0
     local buf=""
+    local plain_line
     while IFS= read -r line || [ -n "$line" ]; do
         buf="${buf}${e}[${row};0H${e}[K"
-        if [ ${#line} -ge "$w" ]; then
+        plain_line="$(echo "$line" | sed "s/${e}\\[[0-9;]*m//g")"
+        if [ "${#plain_line}" -ge "$w" ]; then
             buf="${buf}${line:0:$((w - 1))}"
         else
             buf="${buf}${line}"
@@ -441,6 +451,63 @@ test_writable() {
     return 1
 }
 
+show_error_frame() {
+    local err_title="$1"
+    local path_label="$2"
+    local path_val="$3"
+    local msg="$4"
+    local action_hint="$5"
+    local flow_result="${6:-error}"
+    local e="$ESC"
+    clear_content
+
+    local inner_w=60
+    _box_row() {
+        local text="$1"; local plain="$2"
+        local pad_len=$(( inner_w - ${#plain} ))
+        [ "$pad_len" -lt 0 ] && pad_len=0
+        local pad; pad="$(printf '%*s' "$pad_len" '')"
+        echo "  ${e}[1;31m│${e}[0m${text}${pad}${e}[1;31m│${e}[0m"
+    }
+
+    local sb=""
+    sb+=""$'\n'
+    sb+="  ${e}[1;31m╭────────────────────────────────────────────────────────────╮${e}[0m"$'\n'
+    sb+="$(_box_row "  ${e}[1;31m✖  ${err_title}${e}[0m" "  ✖  ${err_title}")"$'\n'
+    sb+="  ${e}[1;31m├────────────────────────────────────────────────────────────┤${e}[0m"$'\n'
+    if [ -n "$path_label" ] || [ -n "$path_val" ]; then
+        sb+="$(_box_row "" "")"$'\n'
+        sb+="$(_box_row "  ${e}[90m${path_label}:${e}[0m ${e}[1;37m${path_val}${e}[0m" "  ${path_label}: ${path_val}")"$'\n'
+    fi
+    if [ -n "$msg" ]; then
+        sb+="$(_box_row "" "")"$'\n'
+        sb+="$(_box_row "  ${e}[33m${msg}${e}[0m" "  ${msg}")"$'\n'
+    fi
+    if [ -n "$action_hint" ]; then
+        sb+="$(_box_row "" "")"$'\n'
+        sb+="$(_box_row "     ${e}[1;36m${action_hint}${e}[0m" "     ${action_hint}")"$'\n'
+    fi
+    sb+="$(_box_row "" "")"$'\n'
+    sb+="  ${e}[1;31m╰────────────────────────────────────────────────────────────╯${e}[0m"$'\n\n'
+    sb+="    ${e}[90mENTER confirm | ESC/Q exit${e}[0m"$'\n'
+
+    write_frame "$sb"
+    flush_input
+    read_key > /dev/null
+    FLOW_RESULT="$flow_result"
+}
+
+show_permission_error_frame() {
+    local vivaldi_dir="$1"
+    show_error_frame \
+        "$(tr error_permission)" \
+        "$(tr target_path)" \
+        "$vivaldi_dir" \
+        "$(tr error_admin_required)" \
+        "sudo ./install.sh" \
+        "permission_error"
+}
+
 exit_installer() {
     clear_content
     tty_printf "${ESC}[2J${ESC}[H"
@@ -450,7 +517,15 @@ exit_installer() {
     exit 0  # Immediately exit current (sub)shell — parent checks flag via _check_exit
 }
 
-flush_input() { while read -rsn1 -t 0.01 _ 2>/dev/null; do :; done; }
+# Drop stray keystrokes queued in the terminal. tty-only on purpose: under
+# `curl | bash` stdin is the script itself, so draining it would eat source.
+flush_input() {
+    [ "$HEADLESS" = "1" ] && return 0
+    local tty="/dev/tty"; [ -c "$tty" ] || return 0
+    { stty -icanon min 1 time 0 < "$tty"; } 2>/dev/null || return 0
+    while IFS= read -rsn1 -t "$KEY_TIMEOUT" _ < "$tty" 2>/dev/null; do :; done
+    { stty icanon < "$tty"; } 2>/dev/null || true
+}
 
 # ── Step indicator ────────────────────────────────────────────
 
@@ -505,7 +580,7 @@ read_key() {
     fi
     # Read from /dev/tty when stdin is a pipe (e.g. curl|bash), fall back to stdin
     local tty="/dev/tty"; [ -c "$tty" ] || tty=""
-    { [ -n "$tty" ] && stty -echo -icanon < "$tty"; } 2>/dev/null || true
+    { [ -n "$tty" ] && stty -echo -icanon min 1 time 0 < "$tty"; } 2>/dev/null || true
     local key
     if [ -n "$tty" ]; then
         IFS= read -rsn1 key < "$tty" 2>/dev/null || true
@@ -513,11 +588,11 @@ read_key() {
         IFS= read -rsn1 key 2>/dev/null || true
     fi
     if [ "$key" = $'\x1b' ]; then
-        local rest
+        local rest=""
         if [ -n "$tty" ]; then
-            read -rsn2 -t 0.01 rest < "$tty" 2>/dev/null || true
+            IFS= read -rsn2 -t "$KEY_TIMEOUT" rest < "$tty" 2>/dev/null || true
         else
-            read -rsn2 -t 0.01 rest 2>/dev/null || true
+            IFS= read -rsn2 -t "$KEY_TIMEOUT" rest 2>/dev/null || true
         fi
         case "$rest" in
             '[A') echo "UP";;
@@ -583,6 +658,7 @@ find_mod_source() {
         "VividPeek.css" "VividPlayer.css" "VividQC.css" "VividToast.css"
     )
     local js_files=(
+        "VividAI.js" "VividMarkdown.js"
         "Diabar.js" "AskOnPage.js" "AutoHidePanel.js" "EasyFiles.js" "InteractionFeedback.js"
         "ModConfig.js" "MonochromeIcons.js" "PinnedTabRestore.js" "QuickCapture.js"
         "TabManager.js" "TidyAddress.js" "TidyDownloads.js" "TidyTabs.js"
@@ -635,25 +711,16 @@ ensure_mod_source() {
 }
 
 # ============================================================
-#  6.  Vivaldi Installation Discovery (macOS)
+#  6.  Vivaldi Installation Discovery (macOS / Linux)
 # ============================================================
 
 find_vivaldi_installations() {
     local found=(); local seen=()
 
-    # Shared: add a Vivaldi installation from a Framework path
-    _add_install() {
-        local framework="$1"
-        local resources_dir="${framework}/Resources/vivaldi"
+    _add_entry() {
+        local app_path="$1"; local resources_dir="$2"; local display_name="$3"; local version="$4"
         [ -f "$resources_dir/window.html" ] || return 0
-        local app_path; app_path="${framework%%/Contents/Frameworks/Vivaldi Framework.framework*}"
-        local app_name; app_name="$(basename "$app_path" .app)"
-        local display_name="Vivaldi"
-        case "$app_name" in *Snapshot*|*snapshot*) display_name="Vivaldi Snapshot" ;; esac
-        local version=""
-        [ -f "$app_path/Contents/Info.plist" ] && version="$(plutil -extract CFBundleShortVersionString raw "$app_path/Contents/Info.plist" 2>/dev/null || echo "unknown")"
         local key="${resources_dir}"
-        # bash 3.2 (macOS): ${arr[*]} / ${arr[@]} on empty array + set -u = unbound variable
         local _dup=0
         if [ "${#seen[@]}" -gt 0 ]; then
             for _s in "${seen[@]}"; do [ "$_s" = "$key" ] && { _dup=1; break; }; done
@@ -664,47 +731,98 @@ find_vivaldi_installations() {
         fi
     }
 
-    # 0th: Direct paths (instant O(1) — Vivaldi install paths are predictable)
-    if [ -z "${VIVALDI_TEST_PATH:-}" ]; then
-        local direct_frameworks=(
-            "/Applications/Vivaldi.app/Contents/Frameworks/Vivaldi Framework.framework"
-            "/Applications/Vivaldi Snapshot.app/Contents/Frameworks/Vivaldi Framework.framework"
-            "$HOME/Applications/Vivaldi.app/Contents/Frameworks/Vivaldi Framework.framework"
-            "$HOME/Applications/Vivaldi Snapshot.app/Contents/Frameworks/Vivaldi Framework.framework"
-        )
-        for framework in "${direct_frameworks[@]}"; do
-            [ -d "$framework" ] && _add_install "$framework"
-        done
+    if [ "$(uname -s)" = "Darwin" ]; then
+        # Shared: add a Vivaldi installation from a Framework path
+        _add_install() {
+            local framework="$1"
+            local resources_dir="${framework}/Resources/vivaldi"
+            [ -f "$resources_dir/window.html" ] || return 0
+            local app_path; app_path="${framework%%/Contents/Frameworks/Vivaldi Framework.framework*}"
+            local app_name; app_name="$(basename "$app_path" .app)"
+            local display_name="Vivaldi"
+            case "$app_name" in *Snapshot*|*snapshot*) display_name="Vivaldi Snapshot" ;; esac
+            local version=""
+            [ -f "$app_path/Contents/Info.plist" ] && version="$(plutil -extract CFBundleShortVersionString raw "$app_path/Contents/Info.plist" 2>/dev/null || echo "unknown")"
+            _add_entry "$app_path" "$resources_dir" "$display_name" "$version"
+        }
+
+        # 0th: Direct paths (instant O(1) — Vivaldi install paths are predictable)
+        if [ -z "${VIVALDI_TEST_PATH:-}" ]; then
+            local direct_frameworks=(
+                "/Applications/Vivaldi.app/Contents/Frameworks/Vivaldi Framework.framework"
+                "/Applications/Vivaldi Snapshot.app/Contents/Frameworks/Vivaldi Framework.framework"
+                "$HOME/Applications/Vivaldi.app/Contents/Frameworks/Vivaldi Framework.framework"
+                "$HOME/Applications/Vivaldi Snapshot.app/Contents/Frameworks/Vivaldi Framework.framework"
+            )
+            for framework in "${direct_frameworks[@]}"; do
+                [ -d "$framework" ] && _add_install "$framework"
+            done
+        else
+            # Test mode: inject a synthetic framework path
+            _add_install "$VIVALDI_TEST_PATH/Vivaldi.app/Contents/Frameworks/Vivaldi Framework.framework"
+        fi
+
+        # 1st: mdfind (Spotlight index, ~instant) — supplement for non-standard installs
+        if [ -z "${VIVALDI_TEST_PATH:-}" ]; then
+            while IFS= read -r -d '' framework; do
+                _add_install "$framework"
+            done < <(mdfind "kMDItemFSName == 'Vivaldi Framework.framework'" -0 2>/dev/null || true)
+        fi
+
+        # 2nd: find (filesystem walk) — used when mdfind empty, or in test mode
+        if [ ${#found[@]} -eq 0 ]; then
+            local search_paths=("/Applications" "$HOME/Applications")
+            [ -n "${VIVALDI_TEST_PATH:-}" ] && search_paths=("$VIVALDI_TEST_PATH")
+            while IFS= read -r -d '' framework; do
+                _add_install "$framework"
+            done < <(find "${search_paths[@]}" -type d -name "Vivaldi Framework.framework" -print0 2>/dev/null)
+        fi
+
+        # 3rd: mdfind for window.html (catch non-standard install layouts) — skip in test mode
+        if [ ${#found[@]} -eq 0 ] && [ -z "${VIVALDI_TEST_PATH:-}" ]; then
+            while IFS= read -r html_path; do
+                [[ "$html_path" == *"Vivaldi"* ]] && [[ "$html_path" == *"Resources/vivaldi/window.html" ]] || continue
+                local resources_dir; resources_dir="$(dirname "$html_path")"
+                local framework; framework="$(dirname "$(dirname "$resources_dir")")"
+                _add_install "$framework"
+            done < <(mdfind "kMDItemFSName == 'window.html'" 2>/dev/null || true)
+        fi
     else
-        # Test mode: inject a synthetic framework path
-        _add_install "$VIVALDI_TEST_PATH/Vivaldi.app/Contents/Frameworks/Vivaldi Framework.framework"
+        # Linux discovery
+        _add_linux_install() {
+            local app_path="$1"; local display_name="$2"
+            local resources_dir="$app_path/resources/vivaldi"
+            [ -f "$resources_dir/window.html" ] || return 0
+
+            local version=""
+            if [ -x "$app_path/vivaldi" ]; then
+                version="$("$app_path/vivaldi" --version 2>/dev/null | awk '{print $2}' || true)"
+            fi
+            if [ -z "$version" ] && command -v vivaldi &>/dev/null; then
+                version="$(vivaldi --version 2>/dev/null | awk '{print $2}' || true)"
+            fi
+            [ -z "$version" ] && version="unknown"
+            _add_entry "$app_path" "$resources_dir" "$display_name" "$version"
+        }
+
+        if [ -n "${VIVALDI_TEST_PATH:-}" ]; then
+            _add_linux_install "$VIVALDI_TEST_PATH" "Vivaldi"
+        else
+            local system_paths=(
+                "/opt/vivaldi|Vivaldi"
+                "/opt/vivaldi-snapshot|Vivaldi Snapshot"
+                "/usr/share/vivaldi|Vivaldi"
+                "/usr/lib/vivaldi|Vivaldi"
+                "$HOME/.local/share/flatpak/app/com.vivaldi.Vivaldi/current/active/files/extra/opt/vivaldi|Vivaldi (Flatpak)"
+                "/var/lib/flatpak/app/com.vivaldi.Vivaldi/current/active/files/extra/opt/vivaldi|Vivaldi (Flatpak System)"
+            )
+            for entry in "${system_paths[@]}"; do
+                IFS='|' read -r app_path display_name <<< "$entry"
+                _add_linux_install "$app_path" "$display_name"
+            done
+        fi
     fi
 
-    # 1st: mdfind (Spotlight index, ~instant) — supplement for non-standard installs
-    if [ -z "${VIVALDI_TEST_PATH:-}" ]; then
-        while IFS= read -r -d '' framework; do
-            _add_install "$framework"
-        done < <(mdfind "kMDItemFSName == 'Vivaldi Framework.framework'" -0 2>/dev/null || true)
-    fi
-
-    # 2nd: find (filesystem walk) — used when mdfind empty, or in test mode
-    if [ ${#found[@]} -eq 0 ]; then
-        local search_paths=("/Applications" "$HOME/Applications")
-        [ -n "${VIVALDI_TEST_PATH:-}" ] && search_paths=("$VIVALDI_TEST_PATH")
-        while IFS= read -r -d '' framework; do
-            _add_install "$framework"
-        done < <(find "${search_paths[@]}" -type d -name "Vivaldi Framework.framework" -print0 2>/dev/null)
-    fi
-
-    # 3rd: mdfind for window.html (catch non-standard install layouts) — skip in test mode
-    if [ ${#found[@]} -eq 0 ] && [ -z "${VIVALDI_TEST_PATH:-}" ]; then
-        while IFS= read -r html_path; do
-            [[ "$html_path" == *"Vivaldi"* ]] && [[ "$html_path" == *"Resources/vivaldi/window.html" ]] || continue
-            local resources_dir; resources_dir="$(dirname "$html_path")"
-            local framework; framework="$(dirname "$(dirname "$resources_dir")")"
-            _add_install "$framework"
-        done < <(mdfind "kMDItemFSName == 'window.html'" 2>/dev/null || true)
-    fi
     printf '%s\n' "${found[@]}"
 }
 
@@ -718,22 +836,26 @@ scan_mods() {
     STANDALONE_CSS=(); BUNDLED_CSS=(); STANDALONE_JS=(); BUNDLED_JS=()
     local css_names=(); local js_names=()
     if [ -d "$css_dir" ]; then for f in "$css_dir"/*.css; do [ -f "$f" ] && css_names+=("$(basename "$f" .css)"); done; fi
-    if [ -d "$js_dir" ]; then for f in "$js_dir"/*.js; do [ -f "$f" ] || continue; local n="$(basename "$f")"; [ "$n" = "ModConfig.js" ] && continue; js_names+=("$(basename "$f" .js)"); done; fi
+    if [ -d "$js_dir" ]; then for f in "$js_dir"/*.js; do [ -f "$f" ] || continue; local n="$(basename "$f")"; [ "$n" = "ModConfig.js" ] && continue; [ "$n" = "VividAI.js" ] && continue; [ "$n" = "VividMarkdown.js" ] && continue; js_names+=("$(basename "$f" .js)"); done; fi
     local bundled_keys=()
-    for cb in "${css_names[@]}"; do for jb in "${js_names[@]}"; do [ "$cb" = "$jb" ] && bundled_keys+=("$cb"); done; done
+    # bash 3.2 set -u: ${arr[@]} on an empty array = unbound variable
+    if [ "${#css_names[@]}" -gt 0 ] && [ "${#js_names[@]}" -gt 0 ]; then
+        for cb in "${css_names[@]}"; do for jb in "${js_names[@]}"; do [ "$cb" = "$jb" ] && bundled_keys+=("$cb"); done; done
+    fi
     _in_array() { local k="$1"; shift; for v in "$@"; do [ "$v" = "$k" ] && return 0; done; return 1; }
+    _is_bundled() { [ "${#bundled_keys[@]}" -gt 0 ] && _in_array "$1" "${bundled_keys[@]}"; }
     # CSS
     for f in "$css_dir"/*.css; do [ -f "$f" ] || continue; local name="$(basename "$f")"; local base="${name%.css}"
-        if _in_array "$base" "${bundled_keys[@]}"; then BUNDLED_CSS+=("$name|$base")
+        if _is_bundled "$base"; then BUNDLED_CSS+=("$name|$base")
         else STANDALONE_CSS+=("$name|$base"); fi; done
     [ "${#STANDALONE_CSS[@]}" -gt 0 ] && { IFS=$'\n'; STANDALONE_CSS=($(sort <<<"${STANDALONE_CSS[*]}")); unset IFS; }
     [ "${#BUNDLED_CSS[@]}" -gt 0 ]    && { IFS=$'\n'; BUNDLED_CSS=($(sort <<<"${BUNDLED_CSS[*]}")); unset IFS; }
-    # JS
-    for f in "$js_dir"/*.js; do [ -f "$f" ] || continue; local name="$(basename "$f")"; local base="${name%.js}"; [ "$name" = "ModConfig.js" ] && continue
-        if _in_array "$base" "${bundled_keys[@]}"; then BUNDLED_JS+=("$name|$base|${name%.js}.css")
+    for f in "$js_dir"/*.js; do [ -f "$f" ] || continue; local name="$(basename "$f")"; local base="${name%.js}"; [ "$name" = "ModConfig.js" ] && continue; [ "$name" = "VividAI.js" ] && continue; [ "$name" = "VividMarkdown.js" ] && continue
+        if _is_bundled "$base"; then BUNDLED_JS+=("$name|$base|${name%.js}.css")
         else STANDALONE_JS+=("$name|$base|"); fi; done
     [ "${#STANDALONE_JS[@]}" -gt 0 ]  && { IFS=$'\n'; STANDALONE_JS=($(sort <<<"${STANDALONE_JS[*]}")); unset IFS; }
     [ "${#BUNDLED_JS[@]}" -gt 0 ]     && { IFS=$'\n'; BUNDLED_JS=($(sort <<<"${BUNDLED_JS[*]}")); unset IFS; }
+    return 0  # trailing `&&` guard above must not propagate 1 into `set -e`
 }
 
 # ============================================================
@@ -980,6 +1102,19 @@ backup_window_html() {
     echo "$(tr deploy_backup_done) $bak_path"
     local persistent_dir="${2:-}"
     [ -n "$persistent_dir" ] && mkdir -p "$persistent_dir" && cp "$html_path" "$persistent_dir/window.html.orig" 2>/dev/null || true
+    return 0
+}
+
+verify_window_html() {
+    local vivaldi_dir="$1"; local html_path="$vivaldi_dir/window.html"
+    [ -f "$html_path" ] || return 0
+    # Check: stale script tags (any <script src="...js"> except injectMods.js)
+    local stale; stale=$(grep -c '<script[^>]*src="[^"]*\.js"' "$html_path" 2>/dev/null || true)
+    local injector; injector=$(grep -c 'injectMods\.js' "$html_path" 2>/dev/null || true)
+    stale=$(( stale - injector ))
+    [ "$stale" -gt 0 ] && echo "  ⚠ $stale stale script tag(s) in window.html — run installer again to clean"
+    [ "$injector" -eq 0 ] && echo "  ⚠ injectMods.js missing from window.html"
+    return 0
 }
 
 inject_mod_loader() {
@@ -987,10 +1122,15 @@ inject_mod_loader() {
     echo "$(tr deploy_inject_start)"
     # Strip old manual <script> tags (except injectMods.js) leftover from pre-installer installs
     sed -i '/<script[^>]*src="[^"]*\.js"/{ /injectMods\.js/!d; }' "$html_path" 2>/dev/null || true
-    if grep -q 'injectMods\.js' "$html_path" 2>/dev/null; then echo "$(tr deploy_inject_skip)"; return; fi
-    { sed -i '' '/<body[^>]*>/a\
+    if grep -q 'injectMods\.js' "$html_path" 2>/dev/null; then
+        echo "$(tr deploy_inject_skip)"
+    else
+        { sed -i '' '/<body[^>]*>/a\
   <script src="injectMods.js"></script>' "$html_path" 2>/dev/null; } || { sed -i '/<body[^>]*>/a\  <script src="injectMods.js"></script>' "$html_path" 2>/dev/null; } || true
-    echo "$(tr deploy_inject_done)"
+        echo "$(tr deploy_inject_done)"
+    fi
+    verify_window_html "$vivaldi_dir"
+    return 0
 }
 
 deploy_mod_files() {
@@ -1018,8 +1158,14 @@ deploy_mod_files() {
     for f in "$user_js_dir"/*.js; do
         [ -f "$f" ] || continue
         local bn; bn="$(basename "$f")"
-        [ "$bn" = "ModConfig.js" ] && continue
+        [ "$bn" = "ModConfig.js" ] && continue; [ "$bn" = "VividAI.js" ] && continue; [ "$bn" = "VividMarkdown.js" ] && continue
         [ -f "$source_js_dir/$bn" ] && { rm -f "$f"; cleaned=$((cleaned + 1)); }
+    done
+    # Clean up renamed/removed mods that no longer exist in source
+    for orphan in "TabManager.js" "FindInPage.js"; do
+        [ -f "$user_js_dir/$orphan" ] || continue
+        rm -f "$user_js_dir/$orphan"
+        cleaned=$((cleaned + 1))
     done
     [ "$cleaned" -gt 0 ] && echo "$(trf deploy_cleaned "$cleaned")"
 
@@ -1081,16 +1227,76 @@ post_install() {
     tput cnorm 2>/dev/null || true
     flush_input
     sleep 0.1
-    local vivaldi_running=0
-    pgrep -q Vivaldi 2>/dev/null && vivaldi_running=1
-    if [ "$vivaldi_running" = "1" ]; then
+
+    _is_vivaldi_running() {
+        if [ "$(uname -s)" = "Darwin" ]; then
+            pgrep -q Vivaldi 2>/dev/null
+        else
+            pgrep -f "vivaldi" 2>/dev/null
+        fi
+    }
+
+    _stop_vivaldi() {
+        if [ "$(uname -s)" = "Darwin" ]; then
+            pkill Vivaldi 2>/dev/null || true
+        else
+            pkill -f "vivaldi" 2>/dev/null || true
+        fi
+        local waited=0
+        while _is_vivaldi_running && [ "$waited" -lt 25 ]; do
+            sleep 0.2
+            waited=$((waited + 1))
+        done
+        sleep 0.3
+    }
+
+    _launch_vivaldi() {
+        if [ "$(uname -s)" = "Darwin" ]; then
+            open "$app_path" --args --debug-packed-apps --silent-debugger-extension-api 2>/dev/null || open -a Vivaldi
+        else
+            local bin_cmd="vivaldi"
+            if [ -x "$app_path/vivaldi" ]; then
+                bin_cmd="$app_path/vivaldi"
+            elif command -v vivaldi &>/dev/null; then
+                bin_cmd="vivaldi"
+            elif command -v vivaldi-stable &>/dev/null; then
+                bin_cmd="vivaldi-stable"
+            fi
+
+            local is_flatpak=0
+            [[ "$app_path" == *flatpak* ]] && is_flatpak=1
+
+            if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
+                if command -v systemd-run &>/dev/null; then
+                    if [ "$is_flatpak" -eq 1 ]; then
+                        systemd-run --machine="${SUDO_USER}@.host" --user --unit="vivaldi-launch-$$" \
+                            flatpak run com.vivaldi.Vivaldi --debug-packed-apps --silent-debugger-extension-api >/dev/null 2>&1 &
+                    else
+                        systemd-run --machine="${SUDO_USER}@.host" --user --unit="vivaldi-launch-$$" \
+                            "$bin_cmd" --debug-packed-apps --silent-debugger-extension-api >/dev/null 2>&1 &
+                    fi
+                else
+                    echo ""
+                    echo "  Notice: Running elevated. Please restart Vivaldi from your user session."
+                fi
+            else
+                if [ "$is_flatpak" -eq 1 ]; then
+                    nohup flatpak run com.vivaldi.Vivaldi --debug-packed-apps --silent-debugger-extension-api >/dev/null 2>&1 &
+                else
+                    nohup "$bin_cmd" --debug-packed-apps --silent-debugger-extension-api >/dev/null 2>&1 &
+                fi
+            fi
+        fi
+    }
+
+    if _is_vivaldi_running; then
         echo ""; echo "$(tr post_vivaldi_running)"; echo ""
         printf "%s " "$(tr post_restart_prompt)"
         local key; key="$(read_key)"
         if [ "$key" = "Y" ] || [ "$key" = "ENTER" ]; then
             echo "Y"; echo ""; echo "  $(tr post_restarting)"
-            pkill Vivaldi 2>/dev/null || true; sleep 1
-            open "$app_path" --args --debug-packed-apps --silent-debugger-extension-api 2>/dev/null || open -a Vivaldi
+            _stop_vivaldi
+            _launch_vivaldi
             echo "  Vivaldi restarted."
         else echo "N"; fi
     else
@@ -1098,10 +1304,11 @@ post_install() {
         local key; key="$(read_key)"
         if [ "$key" = "Y" ] || [ "$key" = "ENTER" ]; then
             echo "Y"
-            open "$app_path" --args --debug-packed-apps --silent-debugger-extension-api 2>/dev/null || open -a Vivaldi
+            _launch_vivaldi
             echo "  Vivaldi launched."
         else echo "N"; fi
     fi
+    return 0
 }
 
 # ============================================================
@@ -1257,7 +1464,7 @@ install_flow() {
                     case "$line" in JS:*) jjs="$jjs ${line#JS:}" ;; CSS:*) jcss="$jcss ${line#CSS:}" ;; esac
                 done <<< "$selected_js_result"
                 final_css="$(echo "$selected_css $jcss" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
-                final_js="ModConfig.js $(echo "$jjs" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
+                final_js="ModConfig.js VividAI.js VividMarkdown.js $(echo "$jjs" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
 
                 set_step_info 2 "$total_pages" "$step_labels"
                 PAGES_CONFIRMED=("${pages_confirmed[@]}")
@@ -1270,7 +1477,7 @@ install_flow() {
                     sb+="  $(tr summary_target): $app_path"$'\n'
                     local css_count; css_count="$(echo "$final_css" | wc -w | command tr -d ' ')"
                     local js_count; js_count="$(echo "$final_js" | wc -w | command tr -d ' ')"
-                    js_count=$((js_count - 1))  # exclude ModConfig.js
+                    js_count=$((js_count - 3))  # exclude ModConfig.js, VividAI.js, VividMarkdown.js
                     sb+="  ${e}[32m$(tr summary_css_mods) ($css_count)${e}[0m: $(echo "$final_css" | sed 's/\.css//g')"$'\n'
                     sb+="  ${e}[32m$(tr summary_js_mods) ($js_count)${e}[0m: $(echo "$final_js" | sed 's/\.js//g')"$'\n'
                     sb+=""$'\n'
@@ -1298,11 +1505,7 @@ install_flow() {
 
     # Permission check before touching Vivaldi's directory
     if ! test_writable "$vivaldi_dir"; then
-        local sb="${e}[1;31m$(tr error_permission)${e}[0m"$'\n'
-        sb+="  $(tr target_path): $vivaldi_dir"$'\n'
-        sb+="${e}[90m$(tr error_admin_required)${e}[0m"$'\n\n'
-        sb+="  ${e}[90m$(tr key_exit)${e}[0m"$'\n'
-        write_frame "$sb"; read_key > /dev/null
+        show_permission_error_frame "$vivaldi_dir"
         return 1
     fi
 
@@ -1368,7 +1571,7 @@ manage_flow() {
                     case "$line" in JS:*) jjs="$jjs ${line#JS:}" ;; CSS:*) jcss="$jcss ${line#CSS:}" ;; esac
                 done <<< "$selected_js_result"
                 local final_css; final_css="$(echo "$selected_css $jcss" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
-                local final_js="ModConfig.js $(echo "$jjs" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
+                local final_js="ModConfig.js VividAI.js VividMarkdown.js $(echo "$jjs" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
 
                 local new_css=""; local removed_css=""; local unchanged_css=""
                 # bash 3.2 compat: guard array expansions against empty arrays + set -u
@@ -1419,11 +1622,7 @@ manage_flow() {
 
     # Permission check before touching Vivaldi's directory
     if ! test_writable "$vivaldi_dir"; then
-        local sb="${e}[1;31m$(tr error_permission)${e}[0m"$'\n'
-        sb+="  $(tr target_path): $vivaldi_dir"$'\n'
-        sb+="${e}[90m$(tr error_admin_required)${e}[0m"$'\n\n'
-        sb+="  ${e}[90m$(tr key_exit)${e}[0m"$'\n'
-        write_frame "$sb"; read_key > /dev/null
+        show_permission_error_frame "$vivaldi_dir"
         return 1
     fi
 
@@ -1524,6 +1723,10 @@ do_update() {
     local updated=0
     for mod in $chosen_css; do [ -z "$mod" ] && continue; [ -f "$source_css_dir/$mod" ] && { cp "$source_css_dir/$mod" "$user_css_dir/$mod"; echo "  ${e}[32m[$(tr update_updated_mod)]${e}[0m $mod"; updated=$((updated + 1)); }; done
     for mod in $chosen_js; do [ -z "$mod" ] && continue; [ -f "$source_js_dir/$mod" ] && { cp "$source_js_dir/$mod" "$user_js_dir/$mod"; echo "  ${e}[32m[$(tr update_updated_mod)]${e}[0m $mod"; updated=$((updated + 1)); }; done
+    # Always deploy core modules (they may not be in old state files)
+    for core in "ModConfig.js" "VividAI.js" "VividMarkdown.js"; do
+        [ -f "$source_js_dir/$core" ] && { cp "$source_js_dir/$core" "$user_js_dir/$core"; echo "  ${e}[32m[$(tr update_updated_mod)]${e}[0m $core"; updated=$((updated + 1)); }
+    done
     # Update Import.css (match PS1: rewrites @import paths)
     local import_src="$source_dir/Import.css"; [ ! -f "$import_src" ] && import_src="$source_css_dir/Import.css"
     if [ -f "$import_src" ]; then
@@ -1582,11 +1785,7 @@ do_uninstall() {
 
         # Permission check
         if ! test_writable "$vivaldi_dir"; then
-            local sb="${e}[1;31m$(tr error_permission)${e}[0m"$'\n'
-            sb+="  $(tr target_path): $vivaldi_dir"$'\n'
-            sb+="${e}[90m$(tr error_admin_required)${e}[0m"$'\n\n'
-            sb+="  ${e}[90m$(tr key_exit)${e}[0m"$'\n'
-            write_frame "$sb"; read_key > /dev/null
+            show_permission_error_frame "$vivaldi_dir"
             return 1
         fi
 
@@ -1658,9 +1857,11 @@ main() {
             local result=""
             case "$action" in
                 manage) ensure_mod_source || break; manage_flow "$SOURCE_DIR" "$vivaldi_dir" "$app_path"
-                        [ "$FLOW_RESULT" = "back_to_menu" ] && { FLOW_RESULT=""; continue; }; result="done" ;;
+                        [ "$FLOW_RESULT" = "back_to_menu" ] && { FLOW_RESULT=""; continue; }
+                        [ "$FLOW_RESULT" = "permission_error" ] && exit_installer; result="done" ;;
                 update) ensure_mod_source || break; do_update "$SOURCE_DIR" "$vivaldi_dir"; result="done" ;;
                 uninstall) do_uninstall "$vivaldi_dir" "$app_path"
+                    [ "$FLOW_RESULT" = "permission_error" ] && exit_installer
                     # Re-check state after uninstall — may have removed everything
                     is_installed=0; is_installed "$vivaldi_dir" && is_installed=1
                     has_state=0; get_install_state "$vivaldi_dir" 2>/dev/null && has_state=1
@@ -1686,15 +1887,7 @@ main() {
             [ -n "$result" ] && break
             [ "$EXIT_REQUESTED" = 1 ] && break
         done
-        if [ "$result" = "uninstalled" ]; then
-            # Full uninstall just completed — restart Vivaldi to pick up restored window.html,
-            # then loop back to show the fresh install menu (Install/Exit only)
-            post_install "$app_path"
-            result=""
-            continue
-        fi
         post_install "$app_path"
-        break
 
     elif [ "$has_persist" = "1" ]; then
         # --- Cross-version restore ---
@@ -1750,12 +1943,17 @@ main() {
                 ensure_mod_source || break
                 install_flow "$SOURCE_DIR" "$vivaldi_dir" "$app_path" "" ""
                 [ "$FLOW_RESULT" = "back_to_menu" ] && { FLOW_RESULT=""; continue; }
+                [ "$FLOW_RESULT" = "permission_error" ] && exit_installer
                 post_install "$app_path"
             else exit_installer; fi
             break
         done
     fi
-        break  # Exit top-level loop (fresh install complete or exit)
+
+        # Re-evaluate state after any completed action and loop back to entry menu
+        is_installed=0; is_installed "$vivaldi_dir" && is_installed=1
+        has_state=0; get_install_state "$vivaldi_dir" 2>/dev/null && has_state=1
+        has_persist=0
     done  # End top-level while loop
     echo ""
 }

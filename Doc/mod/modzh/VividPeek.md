@@ -34,6 +34,8 @@
 ### 模组间依赖
 
 - CSS 文件：`ArcPeek.css` 提供 Peek 容器、面板、侧边栏按钮、Nebula 加载效果等全部样式
+- **VividAI.js** -- 共享 AI 配置；已关闭思考模式
+- **VividMarkdown.js** -- 共享 Markdown 渲染器
 
 ## 2. 功能
 

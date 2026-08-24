@@ -24,9 +24,7 @@ This document is based on [TidyTabs.js](/Vivaldi7.9Stable/Javascripts/TidyTabs.j
 - `crypto.randomUUID` -- Generate stack IDs
 
 ### Inter-Module Dependencies
-- **ModConfig** -- Reads AI configuration and mod settings via OPFS file `.askonpage/config.json`
-  - Listens for `vivaldi-mod-ai-config-updated` events to receive AI config changes
-  - Listens for `vivaldi-mod-config-updated` events to receive mod setting changes
+- **VividAI.js** -- Shared AI configuration and OpenAI-compatible API caller; thinking disabled
 - **CSS dependencies**: `TidyTabs.css` (tab stack styles), `ClearTabs.css` (clear button styles)
 
 ## 2. Features

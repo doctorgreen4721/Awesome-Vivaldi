@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="120" viewBox="0 0 1200 120"
+     role="img" aria-labelledby="feat-title feat-desc">
+  <title id="feat-title">Feature Showcase</title>
+  <desc id="feat-desc">Section header for the feature showcase area.</desc>
+
+  <rect width="1200" height="120" fill="none"/>
+
+  <!-- Left accent bar -->
+  <rect x="0" y="40" width="4" height="40" rx="2" fill="#3e4b3f"/>
+
+  <!-- Section title -->
+  <text x="20" y="58" fill="#d8ded8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="28" font-weight="700">Feature Showcase</text>
+
+  <!-- Subtitle -->
+  <text x="20" y="86" fill="#8a908a" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="400">See what each mod does — animated demos for every major feature</text>
+
+  <!-- Decorative line -->
+  <rect x="0" y="108" width="1200" height="1" fill="#2f362f"/>
+</svg>

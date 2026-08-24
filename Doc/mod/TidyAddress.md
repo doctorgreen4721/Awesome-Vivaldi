@@ -16,13 +16,13 @@ This document is based on [TidyAddress.js](/Vivaldi7.9Stable/Javascripts/TidyAdd
 ### External Dependencies
 
 - **MutationObserver**: Watch `#browser` DOM changes, `#urlFieldInput` attribute changes, `<title>` element changes
-- **fetch API**: Call AI Chat Completions endpoint
+- **VividAI.js** -- Shared AI configuration and API caller (replaces local AI_CONFIG)
 - **localStorage**: Cache generated slugs (key: `vivid-address-cache-v1`, limit 600 entries)
 - **navigator.storage.getDirectory()**: Read ModConfig shared configuration
 
 ### Inter-Mod Dependencies
 
-- **AskInPage / ModConfig AI System**: Read `ai.tidyAddress` config from `.askonpage/config.json` via the `vivaldi-mod-ai-config-updated` event
+- **VividAI.js** -- Shared AI configuration; thinking disabled
 
 ## 2. Features
 

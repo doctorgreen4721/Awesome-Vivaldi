@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="400" viewBox="0 0 1200 400"
+     role="img" aria-labelledby="hero-title hero-desc">
+  <title id="hero-title">Volante</title>
+  <desc id="hero-desc">A Vivaldi browser window with right-side vertical tab bar showing favourite tabs, pinned tabs, regular tabs, and a music player — Mods that turn Vivaldi Browser into Arc.</desc>
+
+  <rect width="1200" height="400" fill="#1a1f1a"/>
+
+  <g opacity="0.018" stroke="#d8ded8" stroke-width="0.5">
+    <line x1="0" y1="100" x2="1200" y2="100"/>
+    <line x1="0" y1="200" x2="1200" y2="200"/>
+    <line x1="0" y1="300" x2="1200" y2="300"/>
+    <line x1="400" y1="0" x2="400" y2="400"/>
+    <line x1="800" y1="0" x2="800" y2="400"/>
+  </g>
+
+  <!-- ==================== LEFT: Title Block ==================== -->
+  <g id="title-block" transform="translate(64, 90)">
+    <text x="0" y="0" fill="#8a908a" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="11.5" font-weight="500" letter-spacing="2.5">VIVALDI BROWSER MODS</text>
+    <rect x="0" y="14" width="36" height="2" rx="1" fill="#3e4b3f"/>
+    <text x="0" y="72" fill="#d8ded8" font-family="Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif" font-size="60" font-weight="400" letter-spacing="-0.5" font-style="italic">Volante</text>
+    <text x="0" y="110" fill="#8a908a" font-family="Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif" font-size="17" font-weight="400">Mods that turn Vivaldi Browser into Arc.</text>
+
+    <g transform="translate(0, 148)">
+      <rect x="0" y="0" width="340" height="36" rx="8" fill="#222822" stroke="#2f362f" stroke-width="1"/>
+      <text x="14" y="23" fill="#6b8a9e" font-family="ui-monospace, 'SFMono-Regular', Menlo, 'JetBrains Mono', 'Fira Code', monospace" font-size="12.5" font-weight="500">irm &lt;url&gt;/install.ps1 | iex</text>
+    </g>
+
+    <g transform="translate(0, 200)">
+      <rect x="0" y="0" width="52" height="22" rx="5" fill="#222822" stroke="#2f362f" stroke-width="1"/>
+      <text x="26" y="15" text-anchor="middle" fill="#546b56" font-family="Georgia, 'Palatino Linotype', serif" font-size="10">one cmd</text>
+      <g transform="translate(60, 0)">
+        <rect x="0" y="0" width="68" height="22" rx="5" fill="#222822" stroke="#2f362f" stroke-width="1"/>
+        <text x="34" y="15" text-anchor="middle" fill="#c4955e" font-family="Georgia, 'Palatino Linotype', serif" font-size="10">AI powered</text>
+      </g>
+      <g transform="translate(136, 0)">
+        <rect x="0" y="0" width="56" height="22" rx="5" fill="#222822" stroke="#2f362f" stroke-width="1"/>
+        <text x="28" y="15" text-anchor="middle" fill="#6b8a9e" font-family="Georgia, 'Palatino Linotype', serif" font-size="10">20+ mods</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ==================== RIGHT: Browser Window ==================== -->
+  <g id="browser" transform="translate(480, 20)">
+    <rect width="680" height="360" rx="10" fill="#1e241e" stroke="#2f362f" stroke-width="1.5"/>
+
+    <!-- Auto-hidden header -->
+    <rect x="0" y="0" width="680" height="18" rx="10" fill="#222822"/>
+    <rect x="0" y="8" width="680" height="10" fill="#222822"/>
+    <text x="10" y="13" fill="#333a33" font-family="Georgia, 'Palatino Linotype', serif" font-size="9" font-style="italic">V</text>
+    <rect x="24" y="3" width="120" height="12" rx="6" fill="#1e241e" stroke="#2a302a" stroke-width="0.5"/>
+    <text x="44" y="12" fill="#2a302a" font-family="ui-monospace, monospace" font-size="6.5">vivaldi://start</text>
+
+    <!-- Main content -->
+    <g id="content">
+      <text x="24" y="48" fill="#d8ded8" font-family="Georgia, 'Palatino Linotype', serif" font-size="13" font-weight="700">Your Personalized Start Page</text>
+      <text x="24" y="64" fill="#6b7260" font-family="Georgia, 'Palatino Linotype', serif" font-size="8.5">Tabs, feeds, and notes at a glance.</text>
+
+      <rect x="24" y="78" width="130" height="66" rx="5" fill="#252b25" stroke="#2f362f" stroke-width="0.5"/>
+      <rect x="31" y="86" width="50" height="4" rx="2" fill="#3e4b3f"/>
+      <text x="31" y="102" fill="#8a908a" font-family="Georgia, serif" font-size="7.5">Morning briefing</text>
+      <rect x="31" y="112" width="90" height="3" rx="1.5" fill="#2a302a"/>
+      <rect x="31" y="119" width="65" height="3" rx="1.5" fill="#2a302a"/>
+
+      <rect x="164" y="78" width="130" height="66" rx="5" fill="#252b25" stroke="#2f362f" stroke-width="0.5"/>
+      <rect x="171" y="86" width="42" height="4" rx="2" fill="#6b8a9e"/>
+      <text x="171" y="102" fill="#8a908a" font-family="Georgia, serif" font-size="7.5">Saved articles</text>
+      <rect x="171" y="112" width="100" height="3" rx="1.5" fill="#2a302a"/>
+      <rect x="171" y="119" width="72" height="3" rx="1.5" fill="#2a302a"/>
+
+      <rect x="304" y="78" width="130" height="66" rx="5" fill="#252b25" stroke="#2f362f" stroke-width="0.5"/>
+      <rect x="311" y="86" width="58" height="4" rx="2" fill="#c4955e"/>
+      <text x="311" y="102" fill="#8a908a" font-family="Georgia, serif" font-size="7.5">Quick links</text>
+      <rect x="311" y="112" width="80" height="3" rx="1.5" fill="#2a302a"/>
+      <rect x="311" y="119" width="105" height="3" rx="1.5" fill="#2a302a"/>
+
+      <text x="24" y="170" fill="#5a615a" font-family="Georgia, 'Palatino Linotype', serif" font-size="8.5" font-weight="700">Latest from your feeds</text>
+      <rect x="24" y="178" width="460" height="0.5" fill="#2a302a"/>
+      <rect x="24" y="190" width="180" height="3.5" rx="1.75" fill="#2a302a"/>
+      <rect x="24" y="199" width="260" height="3.5" rx="1.75" fill="#2a302a"/>
+      <rect x="24" y="208" width="140" height="3.5" rx="1.75" fill="#2a302a"/>
+      <rect x="24" y="222" width="220" height="3.5" rx="1.75" fill="#2a302a"/>
+      <rect x="24" y="231" width="160" height="3.5" rx="1.75" fill="#2a302a"/>
+      <rect x="24" y="245" width="200" height="3.5" rx="1.75" fill="#2a302a"/>
+      <rect x="24" y="254" width="280" height="3.5" rx="1.75" fill="#2a302a"/>
+    </g>
+
+    <!-- ===== Right Sidebar: Vertical Tab Bar ===== -->
+    <!-- fav grid: 3 cols × 40w × 24h, gap 6px → total 132px wide → margin 4px each side -->
+    <g id="tabbar" transform="translate(540, 0)">
+      <rect width="140" height="360" fill="#222822"/>
+      <line x1="0" y1="0" x2="0" y2="360" stroke="#2f362f" stroke-width="0.5"/>
+
+      <!-- ── Favourite Tabs (landscape, fills width) ── -->
+      <g transform="translate(4, 10)">
+        <rect x="0"  y="0" width="40" height="24" rx="6" fill="#3e4b3f" opacity="0.55"/>
+        <rect x="46" y="0" width="40" height="24" rx="6" fill="#6b8a9e" opacity="0.45"/>
+        <rect x="92" y="0" width="40" height="24" rx="6" fill="#c4955e" opacity="0.45"/>
+        <rect x="0"  y="30" width="40" height="24" rx="6" fill="#546b56" opacity="0.45"/>
+        <rect x="46" y="30" width="40" height="24" rx="6" fill="#8a6b9e" opacity="0.38"/>
+        <rect x="92" y="30" width="40" height="24" rx="6" fill="#b56357" opacity="0.38"/>
+        <rect x="0"  y="60" width="40" height="24" rx="6" fill="#4a6b7e" opacity="0.38"/>
+        <rect x="46" y="60" width="40" height="24" rx="6" fill="#7e6b4a" opacity="0.38"/>
+        <rect x="92" y="60" width="40" height="24" rx="6" fill="#3e5b6f" opacity="0.32"/>
+      </g>
+
+      <!-- ── Pinned Tabs ── -->
+      <g transform="translate(0, 106)">
+        <rect x="4" y="0" width="132" height="22" rx="4" fill="#3e4b3f"/>
+        <circle cx="13" cy="11" r="3" fill="#546b56"/>
+        <text x="22" y="15" fill="#d8ded8" font-family="Georgia, 'Palatino Linotype', serif" font-size="8.5">GitHub</text>
+        <circle cx="13" cy="33" r="3" fill="#546b56"/>
+        <text x="22" y="37" fill="#8a908a" font-family="Georgia, serif" font-size="8.5">Docs</text>
+        <circle cx="13" cy="55" r="3" fill="#546b56"/>
+        <text x="22" y="59" fill="#8a908a" font-family="Georgia, serif" font-size="8.5">Mail</text>
+
+        <line x1="12" y1="72" x2="128" y2="72" stroke="#2a302a" stroke-width="0.5"/>
+
+        <text x="13" y="90" fill="#8a908a" font-family="Georgia, serif" font-size="8.5">Hacker News</text>
+        <text x="13" y="110" fill="#7a817a" font-family="Georgia, serif" font-size="8.5">Stack Overflow</text>
+        <text x="13" y="130" fill="#7a817a" font-family="Georgia, serif" font-size="8.5">Reddit</text>
+        <text x="13" y="150" fill="#6b7260" font-family="Georgia, serif" font-size="8.5">MDN Web Docs</text>
+        <text x="13" y="170" fill="#6b7260" font-family="Georgia, serif" font-size="8.5">Product Hunt</text>
+        <text x="13" y="190" fill="#5a615a" font-family="Georgia, serif" font-size="8.5">Wikipedia</text>
+      </g>
+
+      <!-- ── Music Player (VividPlayer-style) ── -->
+      <g transform="translate(6, 320)">
+        <rect width="128" height="34" rx="8" fill="#161616"/>
+        <rect x="4" y="4" width="26" height="26" rx="5" fill="#2a302a"/>
+        <text x="10" y="21" fill="#3e4b3f" font-family="Georgia, serif" font-size="12" font-style="italic">♩</text>
+        <text x="36" y="15" fill="#d8ded8" font-family="Georgia, serif" font-size="8.5" font-weight="700">L'Estate</text>
+        <text x="36" y="26" fill="#6b7260" font-family="Georgia, serif" font-size="7">Vivaldi</text>
+        <rect x="36" y="30" width="86" height="2" rx="1" fill="#2a302a"/>
+        <rect x="36" y="30" width="32" height="2" rx="1" fill="#546b56"/>
+      </g>
+    </g>
+  </g>
+</svg>

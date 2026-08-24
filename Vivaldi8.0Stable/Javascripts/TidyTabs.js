@@ -2,68 +2,17 @@
 // @name         Tidy Tabs
 // @description  AI-assisted tab grouping and cleanup for Vivaldi.
 // @requirements TidyTabs.css, ClearTabs.css
-// @version      2026.5.7
+// @version      2026.7.31
 // @author       PaRr0tBoY
 // ==/UserScript==
 
 (function () {
   "use strict";
 
-  // ==================== AI Configuration ====================
-  // 1. Fill in apiKey.
-  // 2. Set apiEndpoint to the full chat completions URL.
-  // 3. Adjust model / timeout / maxTokens if needed.
-  // 4. If apiKey is empty, AI grouping will be skipped.
-  //
-  // Common examples:
-  // GLM: https://open.bigmodel.cn/api/paas/v4/chat/completions
-  // Mimo: https://api.xiaomimimo.com/v1/chat/completions
-  // OpenRouter: https://openrouter.ai/api/v1/chat/completions
-  // DeepSeek: https://api.deepseek.com/chat/completions
-  const AI_CONFIG = {
-    apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
-    apiKey: "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",
-    model: "openrouter/free",
-    timeout: 0,
-    temperature: 0,
-    maxTokens: 8192,
-  };
-  const MOD_AI_CONFIG_KEY = "tidyTabs";
-  const MOD_AI_CONFIG_FILE = "config.json";
-  const MOD_AI_CONFIG_DIR = ".askonpage";
-
-  function applySharedAiConfig(raw) {
-    const aiRoot = raw?.ai && typeof raw.ai === "object" ? raw.ai : raw || {};
-    const base = aiRoot.default && typeof aiRoot.default === "object" ? aiRoot.default : aiRoot;
-    const override = aiRoot.overrides?.[MOD_AI_CONFIG_KEY] && typeof aiRoot.overrides[MOD_AI_CONFIG_KEY] === "object"
-      ? aiRoot.overrides[MOD_AI_CONFIG_KEY]
-      : {};
-    const source = Object.assign({}, base, override);
-    ["apiEndpoint", "apiKey", "model"].forEach((key) => {
-      if (typeof source[key] === "string") {
-        AI_CONFIG[key] = source[key].trim();
-      }
-    });
-  }
-
-  async function loadSharedAiConfig() {
-    try {
-      const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_AI_CONFIG_DIR, { create: true });
-      const fileHandle = await dir.getFileHandle(MOD_AI_CONFIG_FILE, { create: false });
-      const file = await fileHandle.getFile();
-      applySharedAiConfig(JSON.parse(await file.text()));
-      console.log("[TidyTabs] [AI] Shared config loaded. apiKey configured:", !!AI_CONFIG.apiKey, "endpoint:", AI_CONFIG.apiEndpoint, "model:", AI_CONFIG.model);
-    } catch (_error) {
-      console.log("[TidyTabs] [AI] No shared config file found (config.json missing). apiKey configured:", !!AI_CONFIG.apiKey);
-    }
-  }
-
-  loadSharedAiConfig();
-  window.addEventListener("vivaldi-mod-ai-config-updated", (event) => {
-    applySharedAiConfig(event.detail || {});
+  const configReady = VividAI.loadConfig({ modKey: "tidyTabs" });
+  window.addEventListener("vivaldi-mod-ai-config-updated", (e) => {
+    VividAI.applyConfig(e.detail || {});
   });
-
   // ==================== Script Configuration ====================
 
   const CONFIG = {
@@ -94,8 +43,8 @@
   async function loadModSettings() {
     try {
       const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_AI_CONFIG_DIR, { create: true });
-      const fileHandle = await dir.getFileHandle(MOD_AI_CONFIG_FILE, { create: false });
+      const dir = await root.getDirectoryHandle(".askonpage", { create: true });
+      const fileHandle = await dir.getFileHandle("config.json", { create: false });
       const file = await fileHandle.getFile();
       applyModSettings(JSON.parse(await file.text()));
     } catch (_error) {}
@@ -168,23 +117,23 @@
   };
 
   const SUGGESTED_CLOSE_MAP = {
-    Chinese: "建议关闭的标签页",
-    Japanese: "閉じる提案",
-    English: "Suggested to Close",
-    French: "Fermer suggéré",
-    German: "Schließen vorgeschlagen",
-    Spanish: "Cerrar sugerido",
-    Italian: "Chiudere suggerito",
+    Chinese: "Close Me",
+    Japanese: "Close Me",
+    English: "Close Me",
+    French: "Close Me",
+    German: "Close Me",
+    Spanish: "Close Me",
+    Italian: "Close Me",
   };
 
   const SUGGESTED_PIN_MAP = {
-    Chinese: "建议固定的标签页",
-    Japanese: "固定する提案",
-    English: "Suggested to Pin",
-    French: "Épingler suggéré",
-    German: "Anheften vorgeschlagen",
-    Spanish: "Fijar sugerido",
-    Italian: "Fissare suggerito",
+    Chinese: "Pin Me",
+    Japanese: "Pin Me",
+    English: "Pin Me",
+    French: "Pin Me",
+    German: "Pin Me",
+    Spanish: "Pin Me",
+    Italian: "Pin Me",
   };
 
   const SUGGESTED_CLOSE_NAMES = Object.values(SUGGESTED_CLOSE_MAP);
@@ -192,12 +141,12 @@
 
   const getSuggestedCloseName = () => {
     const lang = getLanguageName(getBrowserLanguage());
-    return SUGGESTED_CLOSE_MAP[lang] || "Suggested to Close";
+    return SUGGESTED_CLOSE_MAP[lang] || "Close Me";
   };
 
   const getSuggestedPinName = () => {
     const lang = getLanguageName(getBrowserLanguage());
-    return SUGGESTED_PIN_MAP[lang] || "Suggested to Pin";
+    return SUGGESTED_PIN_MAP[lang] || "Pin Me";
   };
 
   const isSpecialCategory = (name) =>
@@ -234,16 +183,13 @@
   // ==================== Tab Scoring for "Suggested to Close" ====================
 
   const CLOSE_SCORE = {
-    DISCARDED: 30,
+    DISCARDED: 15,
     IDLE_24H: 25,
-    SEARCH_RESULT: 20,
-    DUPLICATE_URL: 15,
-    AGE_7D: 10,
     NO_STACK: 5,
     AUDIBLE: -30,
     ACTIVE: -50,
   };
-  const CLOSE_THRESHOLD = 40;
+  const CLOSE_THRESHOLD = 25;
 
   const SEARCH_URL_PATTERNS = [
     /google\.[a-z.]+\/search/i,
@@ -273,7 +219,7 @@
   const loadTabAgeData = async () => {
     try {
       const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_AI_CONFIG_DIR, { create: true });
+      const dir = await root.getDirectoryHandle(".askonpage", { create: true });
       const fh = await dir.getFileHandle(TAB_AGE_FILE, { create: true });
       const file = await fh.getFile();
       const text = await file.text();
@@ -284,7 +230,7 @@
   const saveTabAgeData = async (data) => {
     try {
       const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_AI_CONFIG_DIR, { create: true });
+      const dir = await root.getDirectoryHandle(".askonpage", { create: true });
       const fh = await dir.getFileHandle(TAB_AGE_FILE, { create: true });
       const writable = await fh.createWritable();
       await writable.write(JSON.stringify(data));
@@ -363,14 +309,6 @@
     const idleMs = age ? Date.now() - age.lastActive : 0;
     if (idleMs > 24 * 60 * 60 * 1000) { score += CLOSE_SCORE.IDLE_24H; reasons.push("idle>24h"); }
 
-    if (isSearchResultPage(tab.url)) { score += CLOSE_SCORE.SEARCH_RESULT; reasons.push("searchResult"); }
-
-    const dupes = allTabs.filter((t) => t.url === tab.url && t.id !== tab.id);
-    if (dupes.length > 0) { score += CLOSE_SCORE.DUPLICATE_URL; reasons.push("duplicateUrl"); }
-
-    const createdMs = age ? Date.now() - age.created : 0;
-    if (createdMs > 7 * 24 * 60 * 60 * 1000) { score += CLOSE_SCORE.AGE_7D; reasons.push("age>7d"); }
-
     if (!stacksMap.has(tab.id)) { score += CLOSE_SCORE.NO_STACK; reasons.push("noStack"); }
 
     // Negative signals (only subtract, never add for absence)
@@ -379,7 +317,6 @@
 
     return { score, reasons };
   };
-
   // ── Build a map of tabId → stackId for all tabs ────────────────────────
 
   const buildStackMap = (allTabs) => {
@@ -393,8 +330,6 @@
     return map;
   };
 
-  // ── Score all tabs and return those above threshold ─────────────────────
-
   const findSuggestedCloseTabs = async (tabs) => {
     const allTabs = await new Promise((r) => chrome.tabs.query({ currentWindow: true }, r));
     const stacksMap = buildStackMap(allTabs);
@@ -402,9 +337,33 @@
     const scored = tabs.map((tab) => ({ tab, ...scoreTab(tab, allTabs, stacksMap, ageData) }));
     const closeTabs = new Set();
 
-    // 1. Handle duplicate URLs: keep the best one (most recently active), close the rest
+    // 1. Hard-close: search result pages — no scoring needed
+    for (const s of scored) {
+      if (isSearchResultPage(s.tab.url)) {
+        closeTabs.add(s.tab);
+      }
+    }
+    if (closeTabs.size > 0) {
+      console.log("[TidyTabs] [scoring] Hard-close search results:", [...closeTabs].map(t => t.id));
+    }
+
+    // 2. Hard-close: tabs older than 7 days
+    for (const s of scored) {
+      if (closeTabs.has(s.tab)) continue;
+      const key = String(s.tab.id);
+      const createdMs = ageData[key] ? Date.now() - ageData[key].created : 0;
+      if (createdMs > 7 * 24 * 60 * 60 * 1000) {
+        closeTabs.add(s.tab);
+      }
+    }
+    if (closeTabs.size > 0) {
+      console.log("[TidyTabs] [scoring] Hard-close age>7d:", [...closeTabs].filter(t => !isSearchResultPage(t.url)).map(t => t.id));
+    }
+
+    // 3. Hard-close: duplicate URLs — keep the best one (most recently active), close the rest
     const urlGroups = new Map();
     for (const s of scored) {
+      if (closeTabs.has(s.tab)) continue; // already hard-closed
       const url = s.tab.url;
       if (!url) continue;
       if (!urlGroups.has(url)) urlGroups.set(url, []);
@@ -412,7 +371,7 @@
     }
     for (const [, group] of urlGroups) {
       if (group.length < 2) continue;
-      // Sort by: not discarded first, then most recently active, then highest score (least close-worthy)
+      // Sort by: not discarded first, then most recently active
       group.sort((a, b) => {
         if (a.tab.discarded !== b.tab.discarded) return a.tab.discarded ? 1 : -1;
         const aActive = (ageData[String(a.tab.id)]?.lastActive) || 0;
@@ -426,7 +385,7 @@
       console.log("[TidyTabs] [scoring] Duplicate URL — keeping tab", group[0].tab.id, "closing", group.length - 1, "duplicates");
     }
 
-    // 2. Score-based: tabs above threshold (that aren't already from duplicates)
+    // 4. Score-based: remaining tabs above threshold
     for (const s of scored) {
       if (closeTabs.has(s.tab)) continue;
       if (s.score >= CLOSE_THRESHOLD) {
@@ -448,40 +407,33 @@
   // ── Behavior-based "Suggested to Pin" scoring ──────────────────────────
 
   const PIN_SCORE = {
-    RESTORED: 35,         // Tab survived browser restart (restoreStatus)
     HIGH_ACTIVATION: 25,  // Activated many times
     LONG_ACTIVE_TIME: 20, // Spent significant time on this tab
     OLD_AGE: 15,          // Tab created long ago, never closed
     FREQUENT_URL: 5,      // URL also appears frequently in history (weak signal)
   };
-  const PIN_THRESHOLD = 40;
+  const PIN_THRESHOLD = 35;
 
   const scoreTabForPin = (tab, ageData, frequentUrls) => {
     if (!tab || tab.pinned) return { score: -999, reasons: [] };
     let score = 0;
     const reasons = [];
 
-    // 1. Restored tab (survived browser restart — user chose not to close it)
-    try {
-      const viv = typeof tab.vivExtData === "string" ? JSON.parse(tab.vivExtData) : (tab.vivExtData || {});
-      if (viv.restoreStatus === "restored") { score += PIN_SCORE.RESTORED; reasons.push("restored"); }
-    } catch (_) { /* skip */ }
-
-    // 2. Activation count
+    // 1. Activation count
     const key = String(tab.id);
     const age = ageData[key];
     const activations = age?.activationCount || 0;
     if (activations >= 10) { score += PIN_SCORE.HIGH_ACTIVATION; reasons.push("activations:" + activations); }
 
-    // 3. Total active time
+    // 2. Total active time
     const activeMs = age?.totalActiveMs || 0;
     if (activeMs > 30 * 60 * 1000) { score += PIN_SCORE.LONG_ACTIVE_TIME; reasons.push("activeTime>30m"); }
 
-    // 4. Tab age (always open, never closed)
+    // 3. Tab age (always open, never closed)
     const createdMs = age ? Date.now() - age.created : 0;
     if (createdMs > 14 * 24 * 60 * 60 * 1000) { score += PIN_SCORE.OLD_AGE; reasons.push("age>14d"); }
 
-    // 5. Frequent URL (weak auxiliary signal)
+    // 4. Frequent URL (weak auxiliary signal)
     if (frequentUrls?.length) {
       const urlSet = new Set(frequentUrls);
       try { if (urlSet.has(new URL(tab.url).href)) { score += PIN_SCORE.FREQUENT_URL; reasons.push("frequentUrl"); } }
@@ -514,19 +466,42 @@
     } catch (_) { return []; }
   };
 
-  const findSuggestedPinTabs = (tabs, ageData, frequentUrls) => {
-    const scored = tabs.map((tab) => ({ tab, ...scoreTabForPin(tab, ageData, frequentUrls) }));
+  const findSuggestedPinTabs = async (tabs, ageData, frequentUrls) => {
+    // Collect domains of already-pinned tabs
+    const allTabs = await new Promise((r) => chrome.tabs.query({ currentWindow: true }, r));
+    const pinnedDomains = new Set();
+    for (const tab of allTabs) {
+      if (tab.pinned && tab.url) {
+        try { pinnedDomains.add(new URL(tab.url).hostname); } catch (_) {}
+      }
+    }
+    if (pinnedDomains.size > 0) {
+      console.log("[TidyTabs] [scoring] Pinned domains:", [...pinnedDomains]);
+    }
+
+    // Filter out tabs whose domain is already pinned
+    const candidateTabs = tabs.filter((tab) => {
+      if (!tab.url) return true;
+      try {
+        const domain = new URL(tab.url).hostname;
+        if (pinnedDomains.has(domain)) return false;
+      } catch (_) {}
+      return true;
+    });
+
+    const scored = candidateTabs.map((tab) => ({ tab, ...scoreTabForPin(tab, ageData, frequentUrls) }));
     const qualifying = scored.filter((s) => s.score >= PIN_THRESHOLD);
 
-    // Deduplicate by URL: keep only the best tab per URL
-    const urlGroups = new Map();
+    // Deduplicate by domain: keep only the best tab per domain
+    const domainGroups = new Map();
     for (const s of qualifying) {
-      const url = s.tab.url || "";
-      if (!urlGroups.has(url)) urlGroups.set(url, []);
-      urlGroups.get(url).push(s);
+      let domain = "";
+      try { domain = new URL(s.tab.url).hostname; } catch (_) { domain = s.tab.url || ""; }
+      if (!domainGroups.has(domain)) domainGroups.set(domain, []);
+      domainGroups.get(domain).push(s);
     }
     const deduped = [];
-    for (const [, group] of urlGroups) {
+    for (const [domain, group] of domainGroups) {
       if (group.length > 1) {
         // Keep highest score; tie-break by most recent activation
         group.sort((a, b) => {
@@ -535,7 +510,7 @@
           const bActive = (ageData[String(b.tab.id)]?.lastActive) || 0;
           return bActive - aActive;
         });
-        console.log("[TidyTabs] [scoring] Pin URL dedup — keeping tab", group[0].tab.id, "dropping", group.length - 1, "duplicate(s) of", (group[0].tab.url || "").substring(0, 50));
+        console.log("[TidyTabs] [scoring] Pin domain dedup — keeping tab", group[0].tab.id, "dropping", group.length - 1, "duplicate(s) of", domain);
       }
       deduped.push(group[0]);
     }
@@ -584,6 +559,9 @@
   };
 
   const getSeparatorKey = (separator) => {
+    // Prefer stable dataset key (survives index shifts from tab add/remove)
+    if (separator?.dataset?.tidyKey) return separator.dataset.tidyKey;
+    // Fallback to index-based key (for separators not yet assigned a tidy key)
     const tabStrip = separator?.closest(SELECTORS.TAB_STRIP);
     const index = getSeparatorIndex(separator);
     if (!tabStrip || index < 0) return null;
@@ -591,15 +569,18 @@
   };
 
   const findLiveSeparatorByKey = (key) => {
-    const [owned = "", indexRaw = "-1"] = String(key || "").split("::");
+    if (!key) return null;
+    // Fast path: search by dataset.tidyKey
+    const byData = document.querySelector(`${SELECTORS.SEPARATOR}[data-tidy-key="${key}"]`);
+    if (byData) return byData;
+    // Fallback: index-based lookup (for keys created before this separator got a tidyKey)
+    const [owned = "", indexRaw = "-1"] = String(key).split("::");
     const index = Number.parseInt(indexRaw, 10);
     if (!Number.isInteger(index) || index < 0) return null;
-
     const tabStrip = getTabStrip();
     if (!tabStrip) return null;
     const currentOwned = tabStrip.getAttribute("aria-owns") || "";
     if (owned && currentOwned && owned !== currentOwned) return null;
-
     return tabStrip.querySelectorAll(":scope > .separator")[index] || null;
   };
 
@@ -612,7 +593,19 @@
 
   const reapplyLoadingStates = () => {
     for (const key of processingSeparators) {
-      setSeparatorLoadingState(key, true);
+      let separator = findLiveSeparatorByKey(key);
+      if (!separator) {
+        // Tab-strip was rebuilt (e.g. auto-hide toggle) — transfer key to a new separator
+        const allSeps = document.querySelectorAll(SELECTORS.SEPARATOR);
+        for (const sep of allSeps) {
+          if (!sep.dataset.tidyKey) { separator = sep; break; }
+        }
+        if (separator) {
+          separator.dataset.tidyKey = key;
+          console.log("[TidyTabs] [recovery] Transferred tidy key to rebuilt separator:", key);
+        }
+      }
+      if (separator) separator.classList.add(CLASSES.LOADING);
     }
   };
 
@@ -763,6 +756,11 @@
     window.VModToast?.show(message, { module: "TidyTabs", ...options });
   };
 
+  const truncateTitle = (title, maxLen = 30) => {
+    if (!title) return "Untitled";
+    return title.length > maxLen ? title.slice(0, maxLen) + "…" : title;
+  };
+
   const openSettings = () => {
     chrome.tabs.query({ url: "vivaldi://settings/*" }, (tabs) => {
       if (tabs?.length) {
@@ -830,72 +828,76 @@
     return stackTabIds;
   };
 
-  // ==================== AI Grouping ====================
+  // Strip site-name suffixes from tab titles (e.g. "Page Title - YouTube" → "Page Title")
+  const cleanTabTitle = (title) => {
+    if (!title) return "";
+    let s = title
+      // Known site names after separator (- – — | · _ » /) — run twice for chained suffixes like "_哔哩哔哩_bilibili"
+      .replace(/\s*[-–—|·_/»]\s*(YouTube|(?:哔哩哔哩|bilibili)(?:视频)?|X(?:\.com|\s*\(Twitter\))?(?:\s*[-–—|·_/»]\s*\w+)*|GitHub|知乎|CSDN|掘金|百度|Google|Reddit|Stack\s*Overflow|nhentai|LINUX\s*DO|AI\s*HOT|Claude|DeepWiki)\s*$/i, "")
+      .replace(/\s*[-–—|·_/»]\s*(YouTube|(?:哔哩哔哩|bilibili)(?:视频)?|X(?:\.com|\s*\(Twitter\))?(?:\s*[-–—|·_/»]\s*\w+)*|GitHub|知乎|CSDN|掘金|百度|Google|Reddit|Stack\s*Overflow|nhentai|LINUX\s*DO|AI\s*HOT|Claude|DeepWiki)\s*$/i, "")
+      // " - Page N" suffix (nhentai etc.)
+      .replace(/\s*[-–—]\s*Page\s*\d*\s*$/i, "")
+      // Generic site suffix: - site.tld
+      .replace(/\s*[-–—|·_/»]\s*[\w.-]+\.(com|net|org|io|ai|do|sh|top|app|ski)\s*$/i, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    return s.length > 60 ? s.slice(0, 60) : s;
+  };
 
   const buildAIPrompt = (tabs, existingStacks, languageName) => {
-    // Build a map from chrome tab.id → local index for opener reference
     const chromeIdToIndex = {};
-    tabs.forEach((tab, i) => {
-      chromeIdToIndex[tab.id] = i;
-    });
+    tabs.forEach((tab, i) => { chromeIdToIndex[tab.id] = i; });
 
     const tabsInfo = tabs.map((tab, i) => ({
       id: i,
-      title: tab.title || "Untitled",
+      title: cleanTabTitle(tab.title) || "Untitled",
       domain: getHostname(tab.url),
-      openerIndex:
-        tab.openerTabId != null ? chromeIdToIndex[tab.openerTabId] : undefined,
+      openerIndex: tab.openerTabId != null ? chromeIdToIndex[tab.openerTabId] : undefined,
     }));
 
-    // Format each tab as "domain/id: title" with optional "↳ opener_domain/opener_id"
-    const tabLines = tabsInfo
-      .map((t) => {
-        let line = `${t.domain}/${t.id}: ${t.title}`;
-        if (t.openerIndex !== undefined) {
-          const opener = tabsInfo[t.openerIndex];
-          if (opener) line = `${line}\n  \u21b3 ${opener.domain}/${opener.id}`;
-        }
-        return line;
-      })
-      .join("\n");
+    const tabLines = tabsInfo.map((t) => {
+      let line = `${t.domain}/${t.id}: ${t.title}`;
+      if (t.openerIndex !== undefined) {
+        const opener = tabsInfo[t.openerIndex];
+        if (opener) line = `${line}\n  \u21b3 ${opener.domain}/${opener.id}`;
+      }
+      return line;
+    }).join("\n");
 
     const othersName = getOthersName();
+    const maxGroups = Math.max(2, Math.min(Math.ceil(Math.sqrt(tabs.length)), tabs.length));
 
-    let prompt = `You are a meticulous expert organizer who follows instructions concisely. I have some tabs! Please help me sort them into groups. I'll provide you with a list of tabs, with their IDs (e.g. google.com/3), their titles, and the tab they were opened from if applicable (e.g. \u21b3 google.com/0).
+    let prompt = `<rules>You are a meticulous research librarian organizing browser tabs into themed clusters. Your goal: discover the specific research topics or work threads that connect these tabs, then name each cluster precisely.
 
-IMPORTANT \u2014 Group primarily by page CONTENT and TOPIC, not by domain. Domain names in the IDs are for identification only. Example: "github.com/1: React docs" and "example.com/5: React tutorial" should group together under "React", NOT under separate "Github" and "Example" domain groups. Look at TITLES to find semantic connections. Domain is the LAST thing you should consider \u2014 only use it when titles have absolutely nothing in common. If a tab has a unique keyword in common with tabs in a group, include it in that group. Use the most descriptive keyword as the group name. Some tabs may be in a group of their own, but you should try to include each tab in a group if possible.
+INPUT FORMAT: Each line is "domain/N: title ↦ parent_domain/M" (the /N is the tab_id for output).
 
-`;
+THINKING PROCESS (do this internally before outputting JSON):
+1. Read ALL tab titles carefully. Identify concrete themes from the TITLE CONTENT — what is the user actually researching or working on? NEVER group tabs solely by website domain. Tabs from the same site can belong to completely different groups based on their content.
+2. Each group name in ${languageName}: an action verb + the specific topic, 2-3 words. Think "what is the user DOING with these tabs?" — NOT "what category are these tabs?" NOT "what website are these tabs from?"
+3. Groups must be THEMATICALLY DISTINCT: if two group names could appear in the same sentence naturally, they should be merged.
+4. Prefer 2-${maxGroups} groups. Fewer groups = each group is too broad. More groups = you're splitting hairs.
+5. A group can have as few as 1 tab if that tab doesn't fit anywhere else, but prefer ≥2 tabs per group.
+6. You MUST include a "${othersName}" group. Put tabs here when: (a) the tab's title/URL gives no clear clue about its content, (b) it doesn't fit any other theme, (c) you would be guessing to assign it. "${othersName}" is better than a wrong guess.
 
-    if (existingStacks && existingStacks.length > 0) {
-      prompt += `Some tabs already belong to user-named stacks. These stacks should be preserved — you may add matching ungrouped tabs into them:
-`;
-      for (const s of existingStacks) {
-        prompt += `- "${s.name}": currently has tab_ids [${s.existingTabIds.join(",")}]
-`;
-      }
-      prompt += `If ungrouped tabs fit these existing stacks' themes, assign them to those stacks using the exact same name. Do NOT create new stacks with these names.
+CRITICAL: The BAD/GOOD naming rules below apply to ALL languages, not just English. Your ${languageName} names must follow the same principles.
 
-`;
+BAD names — static category nouns, compound phrases with & / 与 / 和, generic labels, or website-as-group:
+  "Technology", "Programming & Tools", "AI Applications & News", "B站视频", "Linux论坛", "阅读与写作", "GitHub项目"
+GOOD names — verb + specific topic (reads like a task, not a folder label):
+  "研究Kimi K3模型", "对比DeepSeek与Grok", "阅读Vibe Coding教程", "浏览乒乓球比赛数据", "调试逆向工程工具"
+  The examples above show the PRINCIPLE — adapt to the actual tab content in ${languageName}.
+</rules>`;
+
+    if (existingStacks?.length > 0) {
+      prompt += `\n<stacks>The user already has named stacks. If ungrouped tabs fit an existing stack's theme, add them there (use the exact same name). Do NOT create new stacks with these names:\n${existingStacks.map(s => `- "${s.name}": tab_ids [${s.existingTabIds.join(",")}]`).join("\n")}</stacks>`;
     } else {
-      prompt += `Treat every tab below as raw material for a fresh regrouping. Ignore any previous browser tab stack membership or previous stack names.
-
-`;
+      prompt += `\n<stacks>No existing stacks — start fresh. Ignore any previous stack membership.</stacks>`;
     }
 
-    prompt += `My tabs:
-${tabLines}
-
-**Rules:**
-1. ${existingStacks?.length ? "Preserve existing named stacks; create new groups for remaining tabs." : "Create new groups from the supplied tabs only."}
-2. Group names: concise, specific, in ${languageName}.
-3. Tabs that don't fit any group go to "${othersName}".
-4. Each tab in exactly one group.
-5. Output strictly valid JSON only, no explanation:
-
-{"groups":[{"name":"Group name","tab_ids":[0,1,2]},{"name":"${othersName}","tab_ids":[3]}]}
-
-The tab_ids correspond to the number after the domain slash (e.g. google.com/3 \u2192 tab_id is 3).`;
+    prompt += `\n<tabs>\n${tabLines}\n</tabs>
+<output>Return json strictly, no explanation:
+{"groups":[{"name":"Specific Topic Name","tab_ids":[0,1,2]},{"name":"${othersName}","tab_ids":[3]}]}
+tab_ids = the number after domain/ (e.g. google.com/3 → 3). Each tab in exactly one group.</output>`;
     return prompt;
   };
 
@@ -981,19 +983,11 @@ The tab_ids correspond to the number after the domain slash (e.g. google.com/3 \
     }
   };
 
-  const applyProviderPayloadOptions = (payload) => {
-    if (AI_CONFIG.apiEndpoint?.includes("openrouter.ai")) {
-      payload.include_reasoning = false;
-    } else {
-      payload.thinking = { type: "disabled" };
-    }
-    return payload;
-  };
 
   const getAIGrouping = async (tabs, existingStacks = []) => {
-    console.log("[TidyTabs] [AI] getAIGrouping called — tabs:", tabs.length, "existingStacks:", existingStacks.length, "apiKey configured:", !!AI_CONFIG.apiKey);
+    console.log("[TidyTabs] [AI] getAIGrouping called — tabs:", tabs.length, "existingStacks:", existingStacks.length, "apiKey configured:", !!VividAI.config.apiKey);
 
-    if (!AI_CONFIG.apiKey) {
+    if (!VividAI.config.apiKey) {
       console.warn("[TidyTabs] [AI] Skipped — no API key configured. Will fall back to domain grouping.");
       showToast("AI API key Unconfigured", {
         type: "error",
@@ -1006,51 +1000,26 @@ The tab_ids correspond to the number after the domain slash (e.g. google.com/3 \
 
     const languageName = getLanguageName(getBrowserLanguage());
 
-    let timeoutId = null;
-
     try {
-      const controller =
-        AI_CONFIG.timeout > 0 ? new AbortController() : null;
-      timeoutId =
-        AI_CONFIG.timeout > 0
-          ? setTimeout(() => controller.abort(), AI_CONFIG.timeout)
-          : null;
-
       const promptText = buildAIPrompt(tabs, existingStacks, languageName);
+      console.log("[TidyTabs] [AI] Raw request (%d chars):", promptText.length, promptText);
 
-      const payload = applyProviderPayloadOptions({
-        model: AI_CONFIG.model,
+      console.log("[TidyTabs] [AI] Sending request...");
+      const data = await VividAI.fetchJSON({
         messages: [
           {
             role: "user",
             content: promptText,
           },
         ],
-        temperature: AI_CONFIG.temperature,
-        max_tokens: AI_CONFIG.maxTokens,
-        stream: false,
-        response_format: { type: "json_object" },
-      });
-      console.log("[TidyTabs] [AI] Sending request...");
-      const response = await fetch(AI_CONFIG.apiEndpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${AI_CONFIG.apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://github.com/Gershom-Chen/VivaldiModpack",
-          "X-Title": "Vivaldi TidyTabs",
-        },
-        body: JSON.stringify(payload),
-        signal: controller?.signal,
+        temperature: VividAI.config.temperature,
+        maxTokens: VividAI.config.maxTokens,
+        timeout: VividAI.config.timeout,
+        extra: { response_format: { type: "json_object" }, thinking: { type: "disabled" } },
       });
 
-      if (timeoutId) clearTimeout(timeoutId);
+      console.log("[TidyTabs] [AI] Response received");
 
-      console.log("[TidyTabs] [AI] Response status:", response.status);
-
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-
-      const data = await response.json();
       if (data?.error) throw new Error(`API error: ${data.error.message || JSON.stringify(data.error)}`);
 
       const msg = data.choices?.[0]?.message || {};
@@ -1093,8 +1062,6 @@ The tab_ids correspond to the number after the domain slash (e.g. google.com/3 \
         copyText: error.message,
       });
       return null;
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
     }
   };
 
@@ -1126,8 +1093,12 @@ The tab_ids correspond to the number after the domain slash (e.g. google.com/3 \
       `${i + 1}. [${getHostname(t.url || "")}] ${t.title || "Untitled"}`
     ).join("\n");
 
-    const prompt = `Name this browser tab group in 1-4 words. Be concise and specific.
+    const prompt = `Name this browser tab group in 2-3 words. Must suggest an action or ongoing work — not a static category label. NO ampersand (&), slash, or connective symbols.
 Language: ${languageName}.
+
+BAD: static category nouns, compound phrases with & or /, generic labels
+GOOD: "[verb] [specific topic]" e.g. "Organize AI Docs", "Research Grok API", "Browse Bilibili"
+  (use natural ${languageName} phrasing)
 
 Tabs:
 ${tabInfo}
@@ -1135,48 +1106,26 @@ ${tabInfo}
 Return JSON strictly in this format, with no markdown backticks: {"name":"the group name"}`;
 
     try {
-      const payload = applyProviderPayloadOptions({
-        model: AI_CONFIG.model,
+      const data = await VividAI.fetchJSON({
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3,
-        max_tokens: 128,
-        stream: false,
-        response_format: { type: "json_object" },
+        maxTokens: 128,
+        timeout: VividAI.config.timeout,
+        extra: { response_format: { type: "json_object" }, thinking: { type: "disabled" } },
       });
 
-      const controller = AI_CONFIG.timeout > 0 ? new AbortController() : null;
-      const timeoutId = AI_CONFIG.timeout > 0
-        ? setTimeout(() => controller.abort(), AI_CONFIG.timeout) : null;
+      if (data?.error) return null;
 
-      try {
-        const response = await fetch(AI_CONFIG.apiEndpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${AI_CONFIG.apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/Gershom-Chen/VivaldiModpack",
-            "X-Title": "Vivaldi TidyTabs",
-          },
-          body: JSON.stringify(payload),
-          signal: controller?.signal,
-        });
+      const msg = data.choices?.[0]?.message || {};
+      let raw = msg.content || "";
+      if (!raw && msg.reasoning_content) raw = msg.reasoning_content;
+      if (!raw) return null;
 
-        const data = await response.json();
-        if (!response.ok || data?.error) return null;
-
-        const msg = data.choices?.[0]?.message || {};
-        let raw = msg.content || "";
-        if (!raw && msg.reasoning_content) raw = msg.reasoning_content;
-        if (!raw) return null;
-
-        const cleaned = raw.replace(/<(thought|reasoning)>[\s\S]*?<\/\1>/gi, "").trim();
-        const m = cleaned.match(/\{[\s\S]*?\}/);
-        if (m) {
-          const parsed = JSON.parse(m[0]);
-          if (parsed.name && typeof parsed.name === "string") return parsed.name.trim();
-        }
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId);
+      const cleaned = raw.replace(/<(thought|reasoning)>[\s\S]*?<\/\1>/gi, "").trim();
+      const m = cleaned.match(/\{[\s\S]*?\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]);
+        if (parsed.name && typeof parsed.name === "string") return parsed.name.trim();
       }
     } catch (e) {
       console.warn("[TidyTabs] Stack name generation failed:", e.message);
@@ -1185,7 +1134,7 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
   };
 
   const renameUnnamedStacks = async () => {
-    if (!AI_CONFIG.apiKey) return;
+    if (!VividAI.config.apiKey) return;
 
     const allTabs = await new Promise((resolve) => {
       chrome.tabs.query({ currentWindow: true }, resolve);
@@ -1601,67 +1550,190 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
     return tabs;
   };
 
-  const isTabStack = (element) => {
-    const tabPosition = element.querySelector(SELECTORS.TAB_POSITION);
-    return (
-      tabPosition?.classList.contains(CLASSES.SUBSTACK) ||
-      element.querySelector(SELECTORS.TAB_STACK) !== null
+  // ==================== Clear Button (two-stage window cleanup) ====================
+
+  // Two-stage cleanup scoped to the CURRENT WORKSPACE:
+  //   Stage 1 (Clear) — close loose non-pinned tabs, keeping the focused tab
+  //                      and all tab stacks intact.
+  //   Stage 2 (Clear All) — close the focused tab and every tab stack.
+  // The button shows "Clear All" only while the workspace holds no loose tabs
+  // (its non-pinned tabs are exactly the focused tab plus tab stacks) AND the
+  // arming Clear press happened within the last 5 s — the armed state expires
+  // even when the condition still holds, so a stale Clear All can never fire
+  // without a fresh Clear → Clear All confirmation. The label is re-evaluated
+  // on every tab change, focus move, workspace switch, and at each click.
+  // Stack members are collected with the same semantics as the per-stack close
+  // button (getStackTabIds): closing a stack closes ALL its tabs, pinned ones included.
+  const CLEAR_ARM_WINDOW_MS = 5000;
+  let clearArmed = false;
+  let clearArmTime = 0;
+  let clearArmExpiryTimer = null;
+  let clearArmUpdateTimer = null;
+
+  const getWindowTabs = () =>
+    new Promise((resolve) => {
+      chrome.tabs.query({ currentWindow: true }, (tabs) => {
+        resolve(chrome.runtime.lastError ? [] : tabs);
+      });
+    });
+
+  const removeTabs = (tabIds) =>
+    new Promise((resolve) => {
+      if (tabIds.length === 0) return resolve(0);
+      chrome.tabs.remove(tabIds, () => {
+        if (chrome.runtime.lastError) {
+          console.error("[TidyTabs] [clear] remove failed:", chrome.runtime.lastError.message);
+        }
+        resolve(tabIds.length);
+      });
+    });
+
+  const getCurrentWorkspaceId = async () => {
+    const allTabs = await getWindowTabs();
+    const activeTab = allTabs.find((t) => t.id > 0 && t.active);
+    return activeTab ? (parseVivExtData(activeTab).workspaceId || null) : null;
+  };
+
+  // Tabs from other workspaces must never be touched. If the current workspace
+  // id is unavailable, match only tabs that also lack one (safe: closes nothing).
+  const isTabInWorkspace = (tab, workspaceId) => {
+    const id = parseVivExtData(tab).workspaceId;
+    return workspaceId ? id === workspaceId : !id;
+  };
+
+  const isWithinArmWindow = () => Date.now() - clearArmTime < CLEAR_ARM_WINDOW_MS;
+
+  const setClearArmed = (armed) => {
+    if (armed === clearArmed) return;
+    clearArmed = armed;
+    if (!armed) {
+      clearArmTime = 0;
+      clearTimeout(clearArmExpiryTimer);
+      clearArmExpiryTimer = null;
+    }
+    updateClearButtons();
+  };
+
+  // Arm "Clear All" with a fresh 5 s window — only reachable from a Clear press
+  const armClearAll = () => {
+    clearArmTime = Date.now();
+    clearArmed = true;
+    clearTimeout(clearArmExpiryTimer);
+    clearArmExpiryTimer = setTimeout(() => {
+      clearArmExpiryTimer = null;
+      setClearArmed(false); // window expired — even if the condition still holds
+    }, CLEAR_ARM_WINDOW_MS);
+    updateClearButtons();
+  };
+
+  // "Clear All" is armed only while the current workspace's non-pinned tabs
+  // are exactly the focused tab plus tab stacks — no loose tabs
+  const shouldShowClearAll = async () => {
+    const allTabs = await getWindowTabs();
+    const workspaceId = await getCurrentWorkspaceId();
+    const stackMembers = new Set();
+    let hasStack = false;
+    for (const tab of allTabs) {
+      if (tab.id < 0 || !isTabInWorkspace(tab, workspaceId)) continue;
+      const viv = parseVivExtData(tab);
+      if (viv.group) {
+        stackMembers.add(tab.id);
+        hasStack = true;
+      }
+    }
+    const hasNonPinned = allTabs.some((t) => t.id > 0 && !t.pinned && isTabInWorkspace(t, workspaceId));
+    if (!hasStack && !hasNonPinned) return false; // nothing for stage 2 to do
+    return !allTabs.some((t) =>
+      t.id > 0 && !t.pinned && !t.active && !stackMembers.has(t.id) && isTabInWorkspace(t, workspaceId)
     );
   };
 
-  const isTabActive = (tabPosition) =>
-    tabPosition.querySelector(SELECTORS.ACTIVE) !== null;
-
-  const extractTabId = (tabWrapper) => {
-    if (!tabWrapper) return null;
-    const dataId = tabWrapper.getAttribute("data-id");
-    if (!dataId) return null;
-    const numericId = Number.parseInt(dataId.replace("tab-", ""), 10);
-    return Number.isNaN(numericId) ? null : numericId;
+  const updateClearArmState = async () => {
+    // Can only disarm: an armed window exists only after a Clear press, and
+    // only the click handler (re)arms. Expired window or broken condition → Clear.
+    if (clearArmed && (!isWithinArmWindow() || !(await shouldShowClearAll()))) {
+      setClearArmed(false);
+    }
   };
 
-  const collectTabsToClose = (separator) => {
-    const tabIds = [];
-    let element = separator.nextElementSibling;
+  const scheduleClearArmUpdate = (delay = 250) => {
+    clearTimeout(clearArmUpdateTimer);
+    clearArmUpdateTimer = setTimeout(() => {
+      clearArmUpdateTimer = null;
+      updateClearArmState();
+    }, delay);
+  };
 
-    while (element) {
-      if (element.tagName === "SPAN") {
-        if (isTabStack(element)) {
-          element = element.nextElementSibling;
-          continue;
-        }
+  // Stage 1 — close every non-pinned tab of the current workspace except the
+  // focused one, keeping tab stacks intact (stacks are only closed by the
+  // second click)
+  const closeAllTabsExceptActive = async () => {
+    const allTabs = await getWindowTabs();
+    const workspaceId = await getCurrentWorkspaceId();
+    const stackMembers = new Set();
+    for (const tab of allTabs) {
+      if (tab.id < 0 || !isTabInWorkspace(tab, workspaceId)) continue;
+      const viv = parseVivExtData(tab);
+      if (viv.group) stackMembers.add(tab.id);
+    }
+    const toClose = allTabs
+      .filter((t) => t.id > 0 && !t.pinned && !t.active && !stackMembers.has(t.id) && isTabInWorkspace(t, workspaceId))
+      .map((t) => t.id);
+    const closed = await removeTabs(toClose);
+    if (closed > 0) {
+      showToast(`Closed ${closed} tabs — stacks and active tab kept`, { type: "info" });
+    }
+  };
 
-        const tabPosition = element.querySelector(SELECTORS.TAB_POSITION);
-        if (
-          tabPosition &&
-          !tabPosition.classList.contains(CLASSES.PINNED) &&
-          !isTabActive(tabPosition)
-        ) {
-          const tabId = extractTabId(
-            element.querySelector(SELECTORS.TAB_WRAPPER)
-          );
-          if (tabId !== null) {
-            tabIds.push(tabId);
-          }
-        }
-      }
-      element = element.nextElementSibling;
+  // Stage 2 — close every tab stack of the current workspace (same member
+  // collection as the stack-close button, batched over one tab query), then
+  // the remaining non-pinned tabs, which includes the focused one
+  const closeAllTabsAndStacks = async () => {
+    const allTabs = await getWindowTabs();
+    const workspaceId = await getCurrentWorkspaceId();
+    const closeIds = new Set();
+
+    const stacks = new Map(); // group → member tab ids (pinned included)
+    for (const tab of allTabs) {
+      if (tab.id < 0 || !isTabInWorkspace(tab, workspaceId)) continue;
+      const viv = parseVivExtData(tab);
+      if (!viv.group) continue;
+      if (!stacks.has(viv.group)) stacks.set(viv.group, []);
+      stacks.get(viv.group).push(tab.id);
+    }
+    for (const members of stacks.values()) {
+      for (const id of members) closeIds.add(id);
+    }
+    for (const tab of allTabs) {
+      if (tab.id > 0 && !tab.pinned && isTabInWorkspace(tab, workspaceId)) closeIds.add(tab.id);
     }
 
-    return tabIds;
+    const closed = await removeTabs([...closeIds]);
+    if (closed > 0) showToast(`Closed ${closed} tabs and stacks in this workspace`, { type: "success" });
   };
 
-  const closeTabsBelow = (separator) => {
-    const tabIds = collectTabsToClose(separator);
-    if (tabIds.length === 0) return;
-
-    chrome.tabs.remove(tabIds, () => {
-      if (chrome.runtime.lastError) {
-        console.error("[TidyTabs]", chrome.runtime.lastError.message);
-        return;
-      }
-      scheduleAttachButtons(CONFIG.delays.reattach);
+  const updateClearButtons = () => {
+    document.querySelectorAll(`.${CLASSES.CLEAR_BUTTON}`).forEach((btn) => {
+      btn.classList.toggle("is-armed", clearArmed);
+      btn.textContent = clearArmed ? "Clear All" : "Clear";
+      btn.title = clearArmed
+        ? "Close the focused tab and all tab stacks in this workspace"
+        : "Close all tabs in this workspace except the focused one";
     });
+  };
+
+  const handleClearClick = async () => {
+    const armedNow = (await shouldShowClearAll()) && isWithinArmWindow(); // always decide against live state
+    if (armedNow) {
+      setClearArmed(false);
+      await closeAllTabsAndStacks();
+    } else {
+      await closeAllTabsExceptActive();
+      if (await shouldShowClearAll()) armClearAll();
+      else setClearArmed(false);
+    }
+    scheduleAttachButtons(CONFIG.delays.reattach);
+    scheduleClearArmUpdate(0); // refresh the label after the workspace state changed
   };
 
   // ==================== UI Components ====================
@@ -1676,7 +1748,11 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
   const createClearButton = () => {
     const btn = document.createElement("div");
     btn.className = CLASSES.CLEAR_BUTTON;
-    btn.textContent = "Clear";
+    btn.textContent = clearArmed ? "Clear All" : "Clear";
+    btn.title = clearArmed
+      ? "Close the focused tab and all tab stacks in this workspace"
+      : "Close all tabs in this workspace except the focused one";
+    if (clearArmed) btn.classList.add("is-armed");
     return btn;
   };
 
@@ -1711,9 +1787,33 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
       separator,
       CLASSES.CLEAR_BUTTON,
       createClearButton,
-      closeTabsBelow
+      handleClearClick
     );
-    const key = getSeparatorKey(separator);
+    let key = getSeparatorKey(separator);
+    // If separator has no tidyKey but processing is active, claim an orphaned key
+    // (happens when Vivaldi rebuilds separator DOM, e.g. auto-hide toggle)
+    if (!separator.dataset.tidyKey && processingSeparators.size > 0) {
+      const allSeps = document.querySelectorAll(SELECTORS.SEPARATOR);
+      for (const sep of allSeps) {
+        if (sep === separator) continue;
+        if (sep.dataset.tidyKey && processingSeparators.has(sep.dataset.tidyKey)) {
+          // Another separator already has this key — skip
+        }
+      }
+      // Find a processing key not claimed by any separator
+      for (const pKey of processingSeparators) {
+        let claimed = false;
+        for (const sep of allSeps) {
+          if (sep.dataset.tidyKey === pKey) { claimed = true; break; }
+        }
+        if (!claimed) {
+          separator.dataset.tidyKey = pKey;
+          key = pKey;
+          console.log("[TidyTabs] [recovery] Claimed orphaned key for rebuilt separator:", pKey);
+          break;
+        }
+      }
+    }
     separator.classList.toggle(CLASSES.LOADING, Boolean(key && processingSeparators.has(key)));
   };
 
@@ -1722,6 +1822,7 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
       decorateSeparator(separator);
     });
     injectStackActionButtons();
+    scheduleClearArmUpdate(0);
   };
 
   // ==================== Stack Action Buttons (Pin / Close Stack) ====================
@@ -1924,28 +2025,30 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
     const tabs = await getTabsByWorkspace(workspaceId);
     if (tabs.length < 2) return;
 
-    console.log("[TidyTabs] [decision] autoStackWorkspace — enableAIGrouping:", CONFIG.enableAIGrouping, "apiKey:", !!AI_CONFIG.apiKey, "tabs:", tabs.length);
+    await configReady;
+    console.log("[TidyTabs] [decision] autoStackWorkspace — enableAIGrouping:", CONFIG.enableAIGrouping, "apiKey:", !!VividAI.config.apiKey, "tabs:", tabs.length);
 
-    // Step 1: Extract special stacks (建议固定, 建议关闭)
+    // Step 1: Extract special stacks — Close first, then Pin from remaining
     const ageData = await loadTabAgeData();
     const frequentUrls = await getFrequentUrls();
-    const suggestedPinTabs = findSuggestedPinTabs(tabs, ageData, frequentUrls);
-    const remainingAfterPin = suggestedPinTabs.length
-      ? tabs.filter((t) => !suggestedPinTabs.find((p) => p.id === t.id))
+    const suggestedCloseTabs = await findSuggestedCloseTabs(tabs);
+    const remainingAfterClose = suggestedCloseTabs.length
+      ? tabs.filter((t) => !suggestedCloseTabs.find((c) => c.id === t.id))
       : tabs;
-    const suggestedCloseTabs = await findSuggestedCloseTabs(remainingAfterPin);
-    const remainingTabs = suggestedCloseTabs.length
-      ? remainingAfterPin.filter((t) => !suggestedCloseTabs.find((c) => c.id === t.id))
-      : remainingAfterPin;
+    const suggestedPinTabs = await findSuggestedPinTabs(remainingAfterClose, ageData, frequentUrls);
+    const remainingTabs = suggestedPinTabs.length
+      ? remainingAfterClose.filter((t) => !suggestedPinTabs.find((p) => p.id === t.id))
+      : remainingAfterClose;
 
     // Step 2: Build special groups
     const specialGroups = buildSpecialGroups(suggestedPinTabs, suggestedCloseTabs);
 
     // Step 3: AI-group remaining tabs
     let aiGroups = null;
+    let usedAI = false;
     if (remainingTabs.length >= 2) {
       aiGroups =
-        CONFIG.enableAIGrouping && AI_CONFIG.apiKey
+        CONFIG.enableAIGrouping && VividAI.config.apiKey
           ? (await getAIGrouping(remainingTabs))
           : null;
     }
@@ -1960,6 +2063,9 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
           aiGroups.push({ name: getOthersName(), tabs: remainingTabs, stackId: crypto.randomUUID(), isExisting: false });
         }
       }
+    } else {
+      usedAI = true;
+      handleOrphanTabs(aiGroups, remainingTabs);
     }
 
     // Step 4: Create stacks, then move special stacks to bottom
@@ -1973,21 +2079,36 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
       }
       if (othersGroup) await moveGroupToEnd(othersGroup);
       showToast(`Successfully grouped ${allGroups.length} stacks`, { type: "success" });
+      // Orphan tab toast — explain why a single tab ended up alone
+      if (othersGroup && othersGroup.tabs.length === 1) {
+        const orphan = othersGroup.tabs[0];
+        const title = truncateTitle(orphan.title || orphan.url || "Untitled", 25);
+        const reason = usedAI ? "AI 未分配到组" : "唯一域名，无法配对";
+        showToast(`🏷️ "${title}" — ${reason}`, { type: "info", duration: 6000 });
+      }
     }
   };
 
   const tidyTabsBelow = async (separator) => {
-    const separatorKey = getSeparatorKey(separator);
-    const tabsInfo = await collectTabsFromSeparator(separator);
-
-    if (tabsInfo.length < 2) return;
-
-    if (separatorKey) {
-      processingSeparators.add(separatorKey);
-      setSeparatorLoadingState(separatorKey, true);
-    } else {
-      separator.classList.add(CLASSES.LOADING);
+    // Re-entrancy guard: reject if this separator is already being processed
+    const existingKey = separator?.dataset?.tidyKey;
+    if (existingKey && processingSeparators.has(existingKey)) {
+      console.log("[TidyTabs] [guard] Tidy already in progress for this separator, skipping");
+      return;
     }
+
+    // Assign a stable UUID key that survives DOM index shifts
+    const separatorKey = existingKey || `tidy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    separator.dataset.tidyKey = separatorKey;
+
+    const tabsInfo = await collectTabsFromSeparator(separator);
+    if (tabsInfo.length < 2) {
+      delete separator.dataset.tidyKey;
+      return;
+    }
+
+    processingSeparators.add(separatorKey);
+    setSeparatorLoadingState(separatorKey, true);
 
     try {
       const tabs = (
@@ -1995,7 +2116,8 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
       ).filter(Boolean);
       if (tabs.length < 1) return;
 
-      console.log("[TidyTabs] [decision] tidyTabsBelow — enableAIGrouping:", CONFIG.enableAIGrouping, "apiKey:", !!AI_CONFIG.apiKey, "tabs:", tabs.length);
+      await configReady;
+      console.log("[TidyTabs] [decision] tidyTabsBelow — enableAIGrouping:", CONFIG.enableAIGrouping, "apiKey:", !!VividAI.config.apiKey, "tabs:", tabs.length);
 
       // Step 0: Handle existing stacks — dismantle unnamed, preserve named
       let namedStacks = detectNamedStacks(tabs);
@@ -2022,23 +2144,22 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
       const ageData = await loadTabAgeData();
       const frequentUrls = await getFrequentUrls();
 
-      // Scan pool tabs — PIN takes priority over CLOSE
-      const suggestedPinTabs = findSuggestedPinTabs(pool, ageData, frequentUrls);
-      const remainingAfterPin = suggestedPinTabs.length
-        ? pool.filter((t) => !suggestedPinTabs.find((p) => p.id === t.id))
+      // Scan pool tabs — CLOSE first, then PIN from remaining
+      const suggestedCloseTabs = await findSuggestedCloseTabs(pool);
+      const remainingAfterClose = suggestedCloseTabs.length
+        ? pool.filter((t) => !suggestedCloseTabs.find((c) => c.id === t.id))
         : pool;
-      const suggestedCloseTabs = await findSuggestedCloseTabs(remainingAfterPin);
-      const remainingTabs = suggestedCloseTabs.length
-        ? remainingAfterPin.filter((t) => !suggestedCloseTabs.find((c) => c.id === t.id))
-        : remainingAfterPin;
+      const suggestedPinTabs = await findSuggestedPinTabs(remainingAfterClose, ageData, frequentUrls);
+      let remainingTabs = suggestedPinTabs.length
+        ? remainingAfterClose.filter((t) => !suggestedPinTabs.find((p) => p.id === t.id))
+        : remainingAfterClose;
 
-      // Detect tabs that qualified for both PIN and CLOSE (PIN wins)
-      if (suggestedPinTabs.length > 0) {
-        const bothCheck = await findSuggestedCloseTabs(suggestedPinTabs);
-        if (bothCheck.length > 0) {
-          console.log("[TidyTabs] [scoring] ⚠️", bothCheck.length, "tab(s) qualify for both PIN & CLOSE → PIN takes priority:",
-            bothCheck.map((t) => ({ id: t.id, title: (t.title || "").substring(0, 50) })));
-        }
+      // Extract internal browser pages (vivaldi://, chrome://, about:, etc.)
+      const isInternalPage = (url) => /^(vivaldi|chrome|chrome-extension|about|edge|brave):/.test(url || "");
+      const internalTabs = remainingTabs.filter((t) => isInternalPage(t.url));
+      if (internalTabs.length > 0) {
+        remainingTabs = remainingTabs.filter((t) => !isInternalPage(t.url));
+        console.log("[TidyTabs] [stacks] Extracted", internalTabs.length, "internal page(s) (vivaldi://, chrome://, etc.)");
       }
 
       // Scan inside named stacks — extract tabs that should be closed or pinned
@@ -2047,9 +2168,10 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
         const namedTabs = tabs.filter((t) => allNamedTabIds.has(t.id));
         if (namedTabs.length > 0) {
           console.log("[TidyTabs] [stacks] Scanning", namedTabs.length, "tabs inside named stacks for close/pin suggestions...");
-          const namedPin = findSuggestedPinTabs(namedTabs, ageData, frequentUrls);
-          const namedClose = await findSuggestedCloseTabs(
-            namedTabs.filter((t) => !namedPin.find((p) => p.id === t.id))
+          const namedClose = await findSuggestedCloseTabs(namedTabs);
+          const namedPin = await findSuggestedPinTabs(
+            namedTabs.filter((t) => !namedClose.find((c) => c.id === t.id)),
+            ageData, frequentUrls
           );
 
           // Track which named stacks had tabs extracted
@@ -2082,11 +2204,11 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
 
           // Add extracted tabs to special categories
           if (namedPin.length > 0) {
-            console.log("[TidyTabs] [stacks]   →", namedPin.length, "tabs moved to 建议固定");
+            console.log("[TidyTabs] [stacks]   →", namedPin.length, "tabs moved to Pin Me");
             suggestedPinTabs.push(...namedPin);
           }
           if (namedClose.length > 0) {
-            console.log("[TidyTabs] [stacks]   →", namedClose.length, "tabs moved to 建议关闭");
+            console.log("[TidyTabs] [stacks]   →", namedClose.length, "tabs moved to Close Me");
             suggestedCloseTabs.push(...namedClose);
           }
           console.log("[TidyTabs] [stacks] After scanning,", namedStacks.length, "named stacks remain, pool size:", remainingTabs.length + suggestedPinTabs.length + suggestedCloseTabs.length - namedPin.length - namedClose.length);
@@ -2096,13 +2218,20 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
       // Step 2: Build special groups
       const specialGroups = buildSpecialGroups(suggestedPinTabs, suggestedCloseTabs);
 
+      // Build Internal Page group if any internal pages exist
+      let internalGroup = null;
+      if (internalTabs.length > 0) {
+        internalGroup = { name: "Internal Page", tabs: internalTabs, stackId: crypto.randomUUID(), isExisting: false, isSpecial: true };
+      }
+
       // Step 3: AI-group remaining tabs, passing named stacks so AI can add tabs to them
       // Build existingStacks for AI with existingTabIds for prompt
       const aiExistingStacks = namedStacks.map((s) => ({ id: s.id, name: s.name, existingTabIds: s.tabIds }));
       let aiGroups = null;
+      let usedAI = false;
       if (remainingTabs.length >= 2) {
         aiGroups =
-          CONFIG.enableAIGrouping && AI_CONFIG.apiKey
+          CONFIG.enableAIGrouping && VividAI.config.apiKey
             ? (await getAIGrouping(remainingTabs, aiExistingStacks))
             : null;
       }
@@ -2118,15 +2247,16 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
           }
         }
       } else {
+        usedAI = true;
+        handleOrphanTabs(aiGroups, remainingTabs, aiExistingStacks);
         console.log("[TidyTabs] [decision] Using AI-generated groups:", aiGroups.map(g => g.name));
       }
 
-      // Step 4: Combine — special groups first, then AI groups
+      // Step 4: Combine — AI groups → Internal Page → Pin Me → Close Me → Others
       // Handle named stack groups: they need to merge into existing stacks, not create new ones
       const newAiGroups = [];
       for (const g of aiGroups) {
         if (g.isExisting) {
-          // Tabs assigned by AI to an existing named stack — add them to it
           console.log("[TidyTabs] [stacks] Adding", g.tabs.length, "tabs to existing stack:", g.name);
           await addTabsToExistingStack(g.stackId, g.name, g.tabs);
         } else {
@@ -2134,19 +2264,28 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
         }
       }
 
-      // Create all stacks, then move special stacks to bottom
-      const othersGroup = newAiGroups.find((g) => OTHERS_NAMES.includes(g.name));
+      // Create all stacks — "其它" always exists (AI-created or empty placeholder)
+      const othersGroup = newAiGroups.find((g) => OTHERS_NAMES.includes(g.name))
+        || { name: getOthersName(), tabs: [], stackId: crypto.randomUUID(), isExisting: false };
       const normalGroups = newAiGroups.filter((g) => !OTHERS_NAMES.includes(g.name));
-      const allGroups = [...normalGroups, ...specialGroups, ...(othersGroup ? [othersGroup] : [])];
+      const allGroups = [...normalGroups, ...(internalGroup ? [internalGroup] : []), ...specialGroups, othersGroup];
       if (allGroups.length > 0) {
         await createTabStacks(allGroups);
-        // Move to bottom in order: 建议固定 → 建议关闭 → Others
-        // Move to bottom: 建议固定 first, then 建议关闭, then Others last
+        // Move to bottom in order: Internal Page → Pin Me → Close Me → Others
+        if (internalGroup) await moveGroupToEnd(internalGroup);
         for (const g of specialGroups) {
           await moveGroupToEnd(g);
         }
         if (othersGroup) await moveGroupToEnd(othersGroup);
         showToast(`Successfully grouped ${allGroups.length} stacks`, { type: "success" });
+        if (othersGroup && othersGroup.tabs.length === 1) {
+          const orphan = othersGroup.tabs[0];
+          const title = truncateTitle(orphan.title || orphan.url || "Untitled", 25);
+          const reason = usedAI
+            ? "AI 未分配到组"
+            : "唯一域名，无法配对";
+          showToast(`🏷️ "${title}" — ${reason}`, { type: "info", duration: 6000 });
+        }
       }
 
       // Name any existing stacks that lack fixedGroupTitle
@@ -2154,12 +2293,9 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
       // Color any existing stacks that lack groupColor
       await colorUncoloredStacks();
     } finally {
-      if (separatorKey) {
-        processingSeparators.delete(separatorKey);
-        setSeparatorLoadingState(separatorKey, false);
-      } else {
-        separator.classList.remove(CLASSES.LOADING);
-      }
+      processingSeparators.delete(separatorKey);
+      setSeparatorLoadingState(separatorKey, false);
+      delete separator.dataset.tidyKey;
       scheduleAttachButtons(CONFIG.delays.reattach);
     }
   };
@@ -2193,7 +2329,8 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
 
     tabStripObserver = new MutationObserver((mutations) => {
       let changed = false,
-        wsSwitch = false;
+        wsSwitch = false,
+        classMutated = false;
       for (const m of mutations) {
         if (m.type === "childList" && m.addedNodes.length > 0) {
           for (const n of m.addedNodes) {
@@ -2219,9 +2356,34 @@ Return JSON strictly in this format, with no markdown backticks: {"name":"the gr
             m.target.classList.add(CLASSES.LOADING);
           }
         }
+        if (m.type === "attributes" && m.attributeName === "class") classMutated = true;
         if (changed && wsSwitch) break;
       }
+      // Keep the armed label honest: tab additions/removals, focus moves, and
+      // workspace switches can all break (or restore) the clean state.
+      if (changed || wsSwitch || classMutated) {
+        scheduleClearArmUpdate();
+      }
       if (changed || wsSwitch) {
+        // Auto-hide toggle or tab-strip rebuild may replace separator DOM,
+        // dropping dataset.tidyKey. Transfer orphaned processing keys before
+        // re-scheduling button attach so LOADING state persists.
+        if (changed && processingSeparators.size > 0) {
+          const allSeps = tabStrip.querySelectorAll(":scope > .separator");
+          for (const sep of allSeps) {
+            if (!sep.dataset.tidyKey && !sep.classList.contains(CLASSES.LOADING)) {
+              for (const key of processingSeparators) {
+                const existing = tabStrip.querySelector(`[data-tidy-key="${key}"]`);
+                if (!existing) {
+                  sep.dataset.tidyKey = key;
+                  sep.classList.add(CLASSES.LOADING);
+                  console.log("[TidyTabs] [recovery] Transferred tidy key to rebuilt separator:", key);
+                  break;
+                }
+              }
+            }
+          }
+        }
         scheduleAttachButtons(
           wsSwitch ? CONFIG.delays.workspaceSwitch : CONFIG.delays.mutation
         );

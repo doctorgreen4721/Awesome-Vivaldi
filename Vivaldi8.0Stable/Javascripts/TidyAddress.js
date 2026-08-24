@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vivid Address
 // @description  Rewrites the visible URL suffix into an AI-generated slug while preserving the real address.
-// @version      2026.4.20
+// @version      2026.7.21
 // @author       PaRr0tBoY
 // ==/UserScript==
 
@@ -9,55 +9,11 @@
   "use strict";
 
   // ==================== AI Configuration ====================
-  // 1. Fill in apiKey.
-  // 2. Set apiEndpoint to the full chat completions URL.
-  // 3. Adjust model / timeout / maxTokens if needed.
-  // 4. If apiKey is empty, Vivid Address will fall back to the original path.
-  //
-  // Common examples:
-  // GLM: https://open.bigmodel.cn/api/paas/v4/chat/completions
-  // Mimo: https://api.xiaomimimo.com/v1/chat/completions
-  // OpenRouter: https://openrouter.ai/api/v1/chat/completions
-  // DeepSeek: https://api.deepseek.com/chat/completions
-  const AI_CONFIG = {
-    apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
-    apiKey: "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",
-    model: "openrouter/free",
-    timeout: 0,
-    temperature: 0.1,
-    maxTokens: 80,
-  };
-  const MOD_AI_CONFIG_KEY = "tidyAddress";
-  const MOD_AI_CONFIG_FILE = "config.json";
-  const MOD_AI_CONFIG_DIR = ".askonpage";
-
-  function applySharedAiConfig(raw) {
-    const aiRoot = raw?.ai && typeof raw.ai === "object" ? raw.ai : raw || {};
-    const base = aiRoot.default && typeof aiRoot.default === "object" ? aiRoot.default : aiRoot;
-    const override = aiRoot.overrides?.[MOD_AI_CONFIG_KEY] && typeof aiRoot.overrides[MOD_AI_CONFIG_KEY] === "object"
-      ? aiRoot.overrides[MOD_AI_CONFIG_KEY]
-      : {};
-    const source = Object.assign({}, base, override);
-    ["apiEndpoint", "apiKey", "model"].forEach((key) => {
-      if (typeof source[key] === "string") {
-        AI_CONFIG[key] = source[key].trim();
-      }
-    });
-  }
-
-  async function loadSharedAiConfig() {
-    try {
-      const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_AI_CONFIG_DIR, { create: true });
-      const fileHandle = await dir.getFileHandle(MOD_AI_CONFIG_FILE, { create: false });
-      const file = await fileHandle.getFile();
-      applySharedAiConfig(JSON.parse(await file.text()));
-    } catch (_error) { }
-  }
-
-  loadSharedAiConfig();
+  // Uses shared VividAI module for AI config + API calls.
+  // apiKey and other settings are loaded from OPFS config.json via VividAI.
+  VividAI.loadConfig({ modKey: "tidyAddress" });
   window.addEventListener("vivaldi-mod-ai-config-updated", (event) => {
-    applySharedAiConfig(event.detail || {});
+    VividAI.applyConfig(event.detail || {});
   });
 
   const STYLE_ID = "vivid-address-styles";
@@ -113,6 +69,8 @@
       this.urlFieldObserverTarget = null;
       this.titleObserver = null;
       this.titleObserverTarget = null;
+      this.autoHideObserver = null;
+      this.autoHideObserverTarget = null;
       this.configUpdateHandler = () => this.scheduleSync();
       this.init();
     }
@@ -172,6 +130,19 @@
         });
         this.titleObserverTarget = titleNode;
       }
+
+      const autoHideWrapper = document.querySelector(
+        ".auto-hide-wrapper:has(.mainbar)"
+      );
+      if (autoHideWrapper && autoHideWrapper !== this.autoHideObserverTarget) {
+        this.autoHideObserver?.disconnect();
+        this.autoHideObserver = new MutationObserver(() => this.scheduleSync());
+        this.autoHideObserver.observe(autoHideWrapper, {
+          attributes: true,
+          attributeFilter: ["class"],
+        });
+        this.autoHideObserverTarget = autoHideWrapper;
+      }
     }
 
     scheduleSync() {
@@ -187,6 +158,14 @@
 
     sync() {
       this.attachObservers();
+
+      // Skip when mainbar auto-hide is active and address bar is hidden
+      const autoHideWrapper = document.querySelector(
+        ".auto-hide-wrapper:has(.mainbar)"
+      );
+      if (autoHideWrapper && !autoHideWrapper.classList.contains("show")) {
+        return;
+      }
 
       const addressField = document.querySelector(".UrlBar-AddressField");
       const wrapper = document.querySelector(
@@ -212,7 +191,7 @@
         this.resetToOriginal(addressField, wrapper);
       } else if (entry?.state === SKIP_STATE) {
         this.resetToOriginal(addressField, wrapper);
-      } else if (!AI_CONFIG.apiKey) {
+      } else if (!VividAI.config.apiKey) {
         this.resetToOriginal(addressField, wrapper);
       } else {
         addressField.dataset.vividAddressState = LOADING_STATE;
@@ -329,63 +308,31 @@
     }
 
     async generateSlug(context) {
-      if (!AI_CONFIG.apiKey) {
+      if (!VividAI.config.apiKey) {
         return null;
       }
 
       const title = await this.getActiveTabTitle(context.url);
       const prompt = this.buildPrompt(title, context.url);
-      const payload = {
-        model: AI_CONFIG.model,
-        messages: [{ role: "user", content: prompt }],
-        temperature: AI_CONFIG.temperature,
-        max_tokens: AI_CONFIG.maxTokens,
-        stream: false,
-        response_format: { type: "json_object" },
-      };
-
-      if (/bigmodel\.cn/.test(AI_CONFIG.apiEndpoint)) {
-        payload.thinking = { type: "disabled" };
-      } else if (AI_CONFIG.apiEndpoint?.includes("openrouter.ai")) {
-        payload.include_reasoning = false;
-      }
-
-      const controller =
-        AI_CONFIG.timeout > 0 ? new AbortController() : null;
-      const timeoutId =
-        AI_CONFIG.timeout > 0
-          ? window.setTimeout(() => controller.abort(), AI_CONFIG.timeout)
-          : null;
 
       try {
-        const response = await fetch(AI_CONFIG.apiEndpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${AI_CONFIG.apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/Gershom-Chen/VivaldiModpack",
-            "X-Title": "Vivid Address",
+        const data = await VividAI.fetchJSON({
+          messages: [{ role: "user", content: prompt }],
+          temperature: VividAI.config.temperature,
+          maxTokens: VividAI.config.maxTokens,
+          extra: {
+            response_format: { type: "json_object" },
+            thinking: { type: "disabled" },
           },
-          body: JSON.stringify(payload),
-          signal: controller?.signal,
         });
-
-        const data = await response.json();
-        if (!response.ok || data?.error) {
-          const errorMessage =
-            data?.error?.message || data?.error || `HTTP ${response.status}`;
-          console.error("[VividAddress] API error:", errorMessage);
-          return null;
-        }
 
         const rawContent = this.extractResponseContent(data);
         const parsed = this.parseJsonPayload(rawContent);
         const slug = this.sanitizeSlug(parsed?.slug || rawContent);
         return slug || null;
-      } finally {
-        if (timeoutId) {
-          window.clearTimeout(timeoutId);
-        }
+      } catch (error) {
+        console.error("[VividAddress] API error:", error?.message || error);
+        return null;
       }
     }
 

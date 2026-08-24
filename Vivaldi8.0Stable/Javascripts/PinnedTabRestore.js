@@ -51,7 +51,12 @@
   async function recordOriginalUrl(tabId, url) {
     const tab = await getTab(tabId);
     if (!tab) return;
-    const viv = tab.vivExtData || {};
+    const viv = (() => {
+      if (!tab.vivExtData) return null;
+      if (typeof tab.vivExtData === "object") return { ...tab.vivExtData };
+      try { return { ...JSON.parse(tab.vivExtData) }; } catch { return null; }
+    })();
+    if (!viv) return; // vivExtData not populated by Vivaldi yet — skip
     if (!viv[DATA_KEY]) {
       viv[DATA_KEY] = url;
       await updateTabExtData(tabId, viv);
@@ -324,7 +329,7 @@
   function setupTabListeners() {
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (changeInfo.pinned === true) {
-        recordOriginalUrl(tabId, tab.url || changeInfo.url || "");
+        if (tab.status !== "loading") recordOriginalUrl(tabId, tab.url || changeInfo.url || "");
         injectModTracker(tabId);
       }
       if (changeInfo.pinned === false) {
@@ -333,6 +338,15 @@
       }
       if (changeInfo.url && tab.pinned) {
         checkPinnedTabUrl(tabId, changeInfo.url);
+      }
+      // When vivExtData gets populated on an already-pinned tab (e.g. after Vivaldi
+      // finishes session restore), record original URL if not already tracked
+      if (changeInfo.vivExtData && tab.pinned && !initialScanDone && tab.status !== "loading") {
+        recordOriginalUrl(tabId, tab.url || changeInfo.url || "");
+      }
+      // Record original URL when a pinned tab finishes loading
+      if (changeInfo.status === "complete" && tab.pinned && !initialScanDone) {
+        recordOriginalUrl(tabId, tab.url || "");
       }
       // Restore pinned tab on discard/sleep
       if ((changeInfo.discarded === true || changeInfo.status === "unloaded") && tab.pinned) {
@@ -523,7 +537,6 @@
     }).observe(root, { childList: true, subtree: true });
   }
 
-  // ── Initial scan ─────────────────────────────────────────────────
 
   async function scanAllPinnedTabs(restore = false) {
     const tabs = await new Promise((resolve) => {
@@ -532,13 +545,16 @@
 
     for (const tab of tabs) {
       if (!tab.pinned || !tab.url) continue;
+      if (tab.status === "loading") continue; // don't write vivExtData while Vivaldi is still processing — triggers workspace race
       injectModTracker(tab.id);
 
       const viv = (() => {
-        if (!tab.vivExtData) return {};
-        if (typeof tab.vivExtData === "object") return tab.vivExtData;
-        try { return JSON.parse(tab.vivExtData); } catch { return {}; }
+        if (!tab.vivExtData) return null;
+        if (typeof tab.vivExtData === "object") return { ...tab.vivExtData };
+        try { return { ...JSON.parse(tab.vivExtData) }; } catch { return null; }
       })();
+
+      if (!viv) continue; // vivExtData not loaded yet — skip; onUpdated will catch it later
 
       if (!viv[DATA_KEY]) {
         viv[DATA_KEY] = tab.url;
@@ -549,7 +565,6 @@
       const cleanCurrent = tab.url.split("#")[0];
       const cleanOriginal = viv[DATA_KEY].split("#")[0];
 
-      // Only restore on first scan (startup), not on DOM rebuild
       if (restore && RESTORE_ON_STARTUP && cleanCurrent !== cleanOriginal) {
         console.log(LOG, `Restoring pinned tab ${tab.id}: ${tab.url} → ${viv[DATA_KEY]}`);
         chrome.tabs.update(tab.id, { url: viv[DATA_KEY] });

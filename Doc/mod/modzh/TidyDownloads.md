@@ -14,16 +14,13 @@
 - `chrome.tabs.query()` - 查询当前聚焦标签页（备用来源信息）
 
 ### 外部依赖
-- `fetch()` - 调用 AI API 进行文件名重命名
-- `AbortController` / `AbortSignal.timeout()` - 请求超时控制
-- `ReadableStream` - 处理 SSE 流式响应
-- `TextDecoder` - 解码流式响应数据
-- `navigator.storage.getDirectory()` (OPFS) - 读取 AI 配置文件
-- `chrome.i18n.getUILanguage()` - UI 语言检测
+- `VividAI.js` -- 共享 AI 配置与 API 调用模块
+- `navigator.storage.getDirectory()` (OPFS) -- 读取 AI 配置文件
+- `chrome.i18n.getUILanguage()` -- UI 语言检测
 
 ### 模组间依赖
 - **VModToast** (`VividToast.js`) - 通过 `window.VModToast?.show()` 显示重命名结果通知
-- **ModConfig / AI 配置系统** - 通过 OPFS 共享配置（`.askonpage/config.json`），支持 `vivaldi-mod-ai-config-updated` 事件热重载
+- **VividAI.js** -- 共享 AI 配置；已关闭思考模式
 - **DownloadPanel.css** - 下载面板样式增强（进度条、文字阴影等）
 
 ## 2. 功能

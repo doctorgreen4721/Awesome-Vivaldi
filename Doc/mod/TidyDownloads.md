@@ -14,16 +14,12 @@ This document is based on [TidyDownloads.js](/Vivaldi7.9Stable/Javascripts/TidyD
 - `chrome.tabs.query()` -- Queries the currently focused tab (fallback source info)
 
 ### External Dependencies
-- `fetch()` -- Calls AI API for filename renaming
-- `AbortController` / `AbortSignal.timeout()` -- Request timeout control
-- `ReadableStream` -- Processes SSE streaming responses
-- `TextDecoder` -- Decodes streaming response data
-- `navigator.storage.getDirectory()` (OPFS) -- Reads AI configuration files
+- **VividAI.js** -- Shared AI configuration and API caller (replaces local AI_CONFIG)
 - `chrome.i18n.getUILanguage()` -- UI language detection
 
 ### Inter-mod Dependencies
 - **VModToast** (`VividToast.js`) -- Displays rename result notifications via `window.VModToast?.show()`
-- **ModConfig / AI Config System** -- Shares configuration through OPFS (`.askonpage/config.json`), supports hot-reload via `vivaldi-mod-ai-config-updated` event
+- **VividAI.js** -- Shared AI configuration and OpenAI-compatible API caller; thinking disabled
 - **DownloadPanel.css** -- Download panel style enhancements (progress bars, text shadows, etc.)
 
 ## 2. Features

@@ -20,13 +20,11 @@
 ### 浏览器 API
 - `MutationObserver` -- 监听 `.tab-strip` DOM 变化（标签增删、栈结构变更）
 - `navigator.storage.getDirectory()` (OPFS) -- 读取共享配置文件
-- `fetch` -- 调用 LLM API（OpenAI 兼容格式）
+- `VividAI.js` -- 共享 AI 配置与 OpenAI 兼容 API 调用
 - `crypto.randomUUID` -- 生成栈 ID
 
 ### 模组间依赖
-- **ModConfig** -- 通过 OPFS 文件 `.askonpage/config.json` 读取 AI 配置和模组设置
-  - 监听 `vivaldi-mod-ai-config-updated` 事件接收 AI 配置变更
-  - 监听 `vivaldi-mod-config-updated` 事件接收模组设置变更
+- **VividAI.js** -- 共享 AI 配置与 API 调用；已关闭思考模式
 - **CSS 依赖**: `TidyTabs.css`（标签栈样式）、`ClearTabs.css`（清理按钮样式）
 
 ## 2. 功能

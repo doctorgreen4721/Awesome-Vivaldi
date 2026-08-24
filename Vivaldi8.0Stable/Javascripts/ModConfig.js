@@ -30,6 +30,8 @@
     { key: "askOnPage", label: "Ask on Page" },
   ];
 
+  const AI_MODULES = MODULES.filter((m) => m.key !== COMMON_KEY);
+
   const CONFIG_PANELS = [
     { key: "workspaceThemeSwitcher", label: "Workspace Theme" },
     { key: "ai", label: "AI Config" },
@@ -80,6 +82,7 @@
       hint: "Settings for Tidy Tabs, Tidy Titles, and related Tidy mods.",
       fields: [
         { key: "enableStackColor", label: "Enable Stack Coloring", type: "boolean", defaultValue: false, help: "When enabled, newly created and existing tab stacks will be automatically assigned random colors. When disabled, stacks remain uncolored." },
+        { key: "minStackRenameThreshold", label: "Min Tabs for Stack Rename", type: "number", defaultValue: 3, help: "Minimum number of tabs in a stack before AI naming triggers. Default: 3. Lower values name smaller groups earlier but may produce vague names." },
       ],
     },
     workspaceThemeSwitcher: {
@@ -138,15 +141,20 @@
   ];
 
   const DEFAULT_CONFIG = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     ai: {
-      default: {
-        provider: "openrouter",
-        apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
-        apiKey: "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",
-        model: "openrouter/free",
-      },
-      overrides: {},
+      providers: [
+        {
+          id: "p_default",
+          name: "OpenRouter",
+          provider: "openrouter",
+          apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
+          apiKey: "[openai_token_redacted]",
+          model: "openrouter/free",
+        },
+      ],
+      defaultProviderId: "p_default",
+      moduleProviderIds: {},
     },
     mods: {
       quickCapture: {},
@@ -159,12 +167,12 @@
   let targetSettingsVisible = false;
   let visibilityRefreshTimer = null;
   let injectRetryTimer = null;
-  const customDrafts = new Map();
 
   function isTargetSettingsUrl(url) {
     const value = String(url || "");
     return value.includes(SETTINGS_PATH_TOKEN)
       || value.includes("vivaldi:settings/appearance")
+      || value.includes("vivaldi://settings/appearance")
       || value.includes("chrome://settings/appearance");
   }
 
@@ -200,6 +208,66 @@
       apiKey: typeof raw?.apiKey === "string" ? raw.apiKey : "",
       model: typeof raw?.model === "string" ? raw.model : "",
     };
+  }
+
+  // ==================== Provider Card helpers ====================
+  function generateCardId() {
+    return "p_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function getProviderCardById(config, id) {
+    return (config.ai?.providers || []).find((p) => p.id === id) || null;
+  }
+
+  function getDefaultProviderCard(config) {
+    return getProviderCardById(config, config.ai?.defaultProviderId) || config.ai?.providers?.[0] || null;
+  }
+
+  function getEffectiveProviderCard(config, moduleKey) {
+    if (!moduleKey || moduleKey === COMMON_KEY) return getDefaultProviderCard(config);
+    const cardId = config.ai?.moduleProviderIds?.[moduleKey];
+    if (cardId) return getProviderCardById(config, cardId);
+    return getDefaultProviderCard(config);
+  }
+
+  function normalizeProviderCard(raw) {
+    return {
+      id: typeof raw?.id === "string" ? raw.id : generateCardId(),
+      name: typeof raw?.name === "string" ? raw.name : "Untitled",
+      provider: typeof raw?.provider === "string" ? raw.provider : "",
+      apiEndpoint: typeof raw?.apiEndpoint === "string" ? raw.apiEndpoint : "",
+      apiKey: typeof raw?.apiKey === "string" ? raw.apiKey : "",
+      model: typeof raw?.model === "string" ? raw.model : "",
+    };
+  }
+
+  function resolveConfigForDispatch(config) {
+    if (!config.ai?.providers) return config;
+    const defaultCard = getDefaultProviderCard(config);
+    const ai = {
+      default: defaultCard ? { provider: defaultCard.provider, apiEndpoint: defaultCard.apiEndpoint, apiKey: defaultCard.apiKey, model: defaultCard.model } : {},
+      overrides: {},
+    };
+    const ids = config.ai.moduleProviderIds || {};
+    Object.keys(ids).forEach((moduleKey) => {
+      const card = getProviderCardById(config, ids[moduleKey]);
+      if (card) {
+        ai.overrides[moduleKey] = { provider: card.provider, apiEndpoint: card.apiEndpoint, apiKey: card.apiKey, model: card.model };
+      }
+    });
+    return Object.assign({}, config, { ai });
+  }
+
+  function buildCardDropdownItems(config, includeDefault) {
+    const items = [];
+    if (includeDefault) items.push({ key: "", label: "Use Default" });
+    (config.ai?.providers || []).forEach((card) => items.push({ key: card.id, label: card.name }));
+    return items;
+  }
+
+  function getModuleLabel(moduleKey) {
+    const mod = MODULES.find((m) => m.key === moduleKey);
+    return mod?.label || moduleKey;
   }
 
   function unwrapPrefValue(value) {
@@ -280,17 +348,38 @@
       return config;
     }
     if (Number.isFinite(Number(raw.schemaVersion))) {
-      config.schemaVersion = Math.max(2, Number(raw.schemaVersion));
+      config.schemaVersion = Math.max(4, Number(raw.schemaVersion));
     }
-    if (raw.ai?.default && typeof raw.ai.default === "object") {
-      config.ai.default = Object.assign(config.ai.default, normalizeAiBlock(raw.ai.default));
+    // New format: providers array
+    if (Array.isArray(raw.ai?.providers) && raw.ai.providers.length > 0) {
+      config.ai.providers = raw.ai.providers.map(normalizeProviderCard);
+      config.ai.defaultProviderId = typeof raw.ai.defaultProviderId === "string"
+        ? raw.ai.defaultProviderId
+        : config.ai.providers[0].id;
+      if (raw.ai.moduleProviderIds && typeof raw.ai.moduleProviderIds === "object") {
+        config.ai.moduleProviderIds = Object.assign({}, raw.ai.moduleProviderIds);
+      }
     } else if (raw.ai && typeof raw.ai === "object") {
-      config.ai.default = Object.assign(config.ai.default, normalizeAiBlock(raw.ai));
-    }
-    if (raw.ai?.overrides && typeof raw.ai.overrides === "object") {
-      Object.keys(raw.ai.overrides).forEach((key) => {
-        config.ai.overrides[key] = normalizeAiBlock(raw.ai.overrides[key]);
-      });
+      // Old format migration: ai.default + ai.overrides → providers
+      const defaultBlock = normalizeAiBlock(raw.ai.default || raw.ai);
+      const defaultCard = Object.assign(normalizeProviderCard({ name: "Default" }), defaultBlock);
+      config.ai.providers = [defaultCard];
+      config.ai.defaultProviderId = defaultCard.id;
+      config.ai.moduleProviderIds = {};
+      if (raw.ai.overrides && typeof raw.ai.overrides === "object") {
+        Object.keys(raw.ai.overrides).forEach((moduleKey) => {
+          const overrideBlock = normalizeAiBlock(raw.ai.overrides[moduleKey]);
+          const card = normalizeProviderCard({
+            name: getModuleLabel(moduleKey),
+            provider: overrideBlock.provider || defaultBlock.provider,
+            apiEndpoint: overrideBlock.apiEndpoint || defaultBlock.apiEndpoint,
+            apiKey: overrideBlock.apiKey || defaultBlock.apiKey,
+            model: overrideBlock.model || defaultBlock.model,
+          });
+          config.ai.providers.push(card);
+          config.ai.moduleProviderIds[moduleKey] = card.id;
+        });
+      }
     }
     if (raw.mods && typeof raw.mods === "object") {
       Object.keys(MOD_SETTING_SCHEMAS).forEach((key) => {
@@ -378,6 +467,18 @@
         writeConfig(recovered).catch((err) => console.error("[ModConfig] Recovery write failed:", err));
         return recovered;
       } catch (_) {
+        // Try reading seed config from installer (set by injectMods.js)
+        if (window.__vivmod_seed_config) {
+          try {
+            const seedData = window.__vivmod_seed_config;
+            delete window.__vivmod_seed_config; // one-time use
+            const merged = mergeConfig(seedData);
+            console.log("[ModConfig] Initializing from installer seed config");
+            // Persist to OPFS so subsequent loads don't need the seed
+            writeConfig(merged).catch((err) => console.error("[ModConfig] Seed config write failed:", err));
+            return merged;
+          } catch (_) { /* malformed seed — fall through */ }
+        }
         return cloneDefaultConfig();
       }
     }
@@ -425,14 +526,15 @@
   }
 
   function dispatchConfigUpdated(config) {
+    const resolved = resolveConfigForDispatch(config);
     window.dispatchEvent(new CustomEvent("vivaldi-mod-ai-config-updated", {
-      detail: config,
+      detail: resolved,
     }));
     window.dispatchEvent(new CustomEvent("vivaldi-mod-config-updated", {
-      detail: config,
+      detail: resolved,
     }));
     window.dispatchEvent(new CustomEvent("ask-in-page-config-updated", {
-      detail: config,
+      detail: resolved,
     }));
   }
 
@@ -502,10 +604,8 @@
       hint.querySelector(".mod-config-info-tooltip").textContent = schema?.hint || "Choose a mod from MOD CONFIG to edit its settings.";
       return;
     }
-    const isCommon = moduleKey === COMMON_KEY;
-    hint.querySelector(".mod-config-info-tooltip").textContent = isCommon
-      ? "This Common AI Config applies to every AI mod. Use the selector below to give a specific mod its own provider, endpoint, key, and model."
-      : "This page overrides Common AI Config for the selected mod. If you do not save module-specific changes, that mod keeps using Common AI Config.";
+    hint.querySelector(".mod-config-info-tooltip").textContent =
+      "Create Provider Cards with API settings, then assign each card to AI modules below. Use 一键统一 to apply one card to all modules.";
   }
 
   function setTopPanel(section, panelKey) {
@@ -522,7 +622,7 @@
     if (modPane) {
       modPane.hidden = panelKey === "ai";
     }
-    setContextHint(section, getSelectedModule(section));
+    setContextHint(section, COMMON_KEY);
   }
 
   function updateRestoreCommonVisibility(section) {
@@ -588,7 +688,9 @@
     input.value = value || "";
     const label = dropdown.querySelector(".mod-config-dropdown-label");
     if (label) {
-      label.textContent = getDropdownLabel(name, input.value);
+      const selectedOption = Array.from(dropdown.querySelectorAll(".mod-config-dropdown-option"))
+        .find((o) => o.dataset.value === (value || ""));
+      label.textContent = selectedOption ? selectedOption.textContent : getDropdownLabel(name, input.value);
     }
     dropdown.querySelectorAll(".mod-config-dropdown-option").forEach((option) => {
       option.dataset.selected = option.dataset.value === input.value ? "true" : "false";
@@ -610,6 +712,9 @@
         list.hidden = true;
       }
     });
+    // Also close the new-provider picker
+    const newList = section.querySelector(".mod-config-new-list");
+    if (newList) newList.hidden = true;
   }
 
   function updateSettingDropdownLabel(dropdown) {
@@ -723,11 +828,32 @@
   function refreshCurrentPanel(section, config) {
     const panelKey = getInput(section, "configPanel").value || "ai";
     if (panelKey === "ai") {
-      fillForm(section, config, getSelectedModule(section));
+      // Rebuild card selector and module assignment
+      const cardItems = (config.ai?.providers || []).map((card) => ({ key: card.id, label: card.name }));
+      const dropdown = section.querySelector('[data-mod-dropdown="cardSelect"]');
+      if (dropdown) {
+        const list = dropdown.querySelector(".mod-config-dropdown-list");
+        if (list) {
+          list.innerHTML = cardItems.map((item) =>
+            '<button type="button" class="mod-config-dropdown-option" role="option" data-value="' + escapeHtml(item.key) + '">' + escapeHtml(item.label) + '</button>'
+          ).join("");
+        }
+        const firstId = config.ai?.providers?.[0]?.id || "";
+        setDropdownValue(section, "cardSelect", firstId, false);
+        const card = getProviderCardById(config, firstId);
+        if (card) {
+          getInput(section, "cardName").value = card.name || "";
+          setDropdownValue(section, "provider", card.provider || "", false);
+          getInput(section, "apiEndpoint").value = card.apiEndpoint || "";
+          getInput(section, "apiKey").value = card.apiKey || "";
+          getInput(section, "model").value = card.model || "";
+          setApiKeyLink(section, card.provider || "");
+        }
+        renderModuleAssignmentGrid(section, config);
+      }
     } else {
       renderModSettingsForm(section, config, panelKey);
     }
-    updateRestoreCommonVisibility(section);
   }
 
   function fillForm(section, config, moduleKey) {
@@ -979,11 +1105,10 @@
   function collectVisibleConfig(section, config) {
     const nextConfig = cloneConfig(config);
     const panelKey = getInput(section, "configPanel").value || "ai";
-    if (panelKey === "ai") {
-      updateConfigFromForm(nextConfig, section);
-    } else {
+    if (panelKey !== "ai") {
       nextConfig.mods[panelKey] = collectModSettings(section, panelKey);
     }
+    // For AI panel, config is already current (saveCurrentCard called before export)
     return mergeConfig(nextConfig);
   }
 
@@ -1667,6 +1792,182 @@
         font-size: 12px;
         text-align: center;
       }
+      /* ── Card editor ── */
+      #${SECTION_ID} .mod-config-card-section {
+        margin-bottom: 4px;
+      }
+      #${SECTION_ID} .mod-config-card-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #${SECTION_ID} .mod-config-card-toolbar .mod-config-dropdown {
+        flex: 1 1 auto;
+        min-width: 0;
+        width: auto !important;
+        max-width: none !important;
+      }
+      #${SECTION_ID} .mod-config-card-btn {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 30px;
+        padding: 0 10px;
+        border: 1px solid var(--colorBorder);
+        border-radius: var(--radiusHalf);
+        background: var(--colorBg);
+        color: var(--colorFg);
+        font-size: 12px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #${SECTION_ID} .mod-config-card-btn:hover {
+        background: var(--colorBgDarker);
+      }
+      #${SECTION_ID} .mod-config-card-delete {
+        color: var(--colorErrorBg);
+      }
+      #${SECTION_ID} .mod-config-card-delete[disabled] {
+        opacity: 0.4;
+        cursor: default;
+        pointer-events: none;
+      }
+      #${SECTION_ID} .mod-config-new-wrap {
+        position: relative;
+        flex: 0 0 auto;
+      }
+      #${SECTION_ID} .mod-config-new-list {
+        position: absolute;
+        z-index: 10000;
+        left: 0;
+        top: calc(100% + 2px);
+        min-width: 140px;
+        background: var(--colorBg);
+        border: 1px solid var(--colorHighlightBg);
+        border-radius: var(--radiusHalf);
+        box-shadow: 0 4px 12px oklch(0 0 0 / 0.18);
+        overflow: hidden;
+      }
+      #${SECTION_ID} .mod-config-new-list[hidden] {
+        display: none !important;
+      }
+      #${SECTION_ID} .mod-config-new-option {
+        display: block;
+        width: 100%;
+        padding: 5px 12px;
+        border: none;
+        background: transparent;
+        color: var(--colorFg);
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #${SECTION_ID} .mod-config-new-option:hover,
+      #${SECTION_ID} .mod-config-new-option:focus {
+        background: var(--colorHighlightBg);
+        color: var(--colorHighlightFg);
+        outline: none;
+      }
+      #${SECTION_ID} .mod-config-input[readonly] {
+        background: var(--colorBgAlphaHeavy);
+        color: var(--colorFgFaded);
+        cursor: default;
+      }
+      #${SECTION_ID} .mod-config-input[readonly]:focus {
+        border-color: var(--colorBorder);
+        box-shadow: none;
+      }
+      /* ── Module assignment ── */
+      #${SECTION_ID} .mod-config-assign-section {
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--colorBorder);
+      }
+      #${SECTION_ID} .mod-config-assign-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      #${SECTION_ID} .mod-config-assign-title {
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--colorFg);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      #${SECTION_ID} .mod-config-apply-all {
+        height: 26px;
+        padding: 0 10px;
+        border: 1px solid var(--colorHighlightBg);
+        border-radius: var(--radiusHalf);
+        background: var(--colorHighlightBg);
+        color: var(--colorHighlightFg);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #${SECTION_ID} .mod-config-apply-all:hover {
+        opacity: 0.9;
+      }
+      #${SECTION_ID} .mod-config-assign-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+      }
+      #${SECTION_ID} .mod-config-assign-row {
+        display: contents;
+      }
+      #${SECTION_ID} .mod-config-assign-label {
+        display: flex;
+        align-items: center;
+        height: 32px;
+        padding: 0 8px 0 0;
+        color: var(--colorFg);
+        font-size: 13px;
+        font-weight: 500;
+        border-bottom: 1px solid var(--colorBorder);
+      }
+      #${SECTION_ID} .mod-config-assign-cell {
+        display: flex;
+        align-items: center;
+        height: 32px;
+        border-bottom: 1px solid var(--colorBorder);
+      }
+      #${SECTION_ID} .mod-config-assign-cell .mod-config-dropdown {
+        width: 100% !important;
+        max-width: none !important;
+      }
+      #${SECTION_ID} .mod-config-assign-cell .mod-config-dropdown-button {
+        width: 100%;
+        min-height: 24px;
+        height: 24px;
+        font-size: 12px;
+        padding: 0 8px;
+        border-color: transparent;
+        background: transparent;
+      }
+      #${SECTION_ID} .mod-config-assign-cell .mod-config-dropdown-button:hover {
+        border-color: var(--colorBorder);
+        background: var(--colorBgAlpha);
+      }
+      @media (max-width: 760px) {
+        #${SECTION_ID} .mod-config-assign-grid {
+          grid-template-columns: 1fr;
+        }
+        #${SECTION_ID} .mod-config-assign-label {
+          height: auto;
+          padding: 6px 0 2px;
+          border-bottom: none;
+        }
+        #${SECTION_ID} .mod-config-assign-cell {
+          height: auto;
+          padding-bottom: 6px;
+        }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -1674,6 +1975,9 @@
   function buildSection() {
     const section = document.createElement("div");
     section.id = SECTION_ID;
+    const newProviderOptions = PROVIDERS.map((p) =>
+      '<button type="button" class="mod-config-new-option" data-provider-key="' + escapeHtml(p.key) + '">' + escapeHtml(p.label) + '</button>'
+    ).join("");
     section.innerHTML = `
       <div class="mod-config-header">
         <div class="mod-config-panel-switcher">
@@ -1691,32 +1995,58 @@
         </div>
       </div>
       <div class="mod-config-ai-pane">
-        <div class="mod-config-grid">
-          <label class="mod-config-label">AI Mod Config</label>
-          ${renderDropdown("module", MODULES, "mod-config-module")}
-          <label class="mod-config-label">Provider</label>
-          ${renderDropdown("provider", PROVIDERS, "mod-config-provider")}
-          <label class="mod-config-label">API Endpoint</label>
-          <input class="mod-config-input" data-mod-config="apiEndpoint" type="url" spellcheck="false" placeholder="https://your-api-endpoint.com/v1/chat/completions">
-          <div class="mod-config-label mod-config-api-key-label">
-            <span>API Key</span>
-            <a class="mod-config-api-key-link" target="_blank" rel="noreferrer" hidden>Get API key</a>
-          </div>
-          <div class="mod-config-api-key-row">
-            <div class="mod-config-key-wrap">
-              <input class="mod-config-input" data-mod-config="apiKey" type="password" spellcheck="false" autocomplete="off" placeholder="Paste your key here...">
-              <button type="button" class="mod-config-eye" title="Show API Key" aria-label="Show API Key">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
-                  <circle cx="12" cy="12" r="2.6"></circle>
-                </svg>
-              </button>
+        <div class="mod-config-card-section">
+          <div class="mod-config-grid">
+            <label class="mod-config-label">Provider Card</label>
+            <div class="mod-config-card-toolbar">
+              <div class="mod-config-dropdown mod-config-card-picker" data-mod-dropdown="cardSelect">
+                <input type="hidden" data-mod-config="cardSelect" value="">
+                <button type="button" class="mod-config-dropdown-button" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="mod-config-dropdown-label">Default</span>
+                  <span class="mod-config-dropdown-caret" aria-hidden="true">▾</span>
+                </button>
+                <div class="mod-config-dropdown-list" role="listbox" hidden></div>
+              </div>
+              <span class="mod-config-new-wrap">
+                <button type="button" class="mod-config-card-btn mod-config-card-new" title="Create new provider card">+ New</button>
+                <div class="mod-config-new-list" hidden>${newProviderOptions}</div>
+              </span>
+              <button type="button" class="mod-config-card-btn mod-config-card-delete" title="Delete this card" disabled>Delete</button>
+            </div>
+            <label class="mod-config-label">Name</label>
+            <input class="mod-config-input" data-mod-config="cardName" type="text" spellcheck="false" placeholder="Card name">
+            <label class="mod-config-label">Provider</label>
+            ${renderDropdown("provider", PROVIDERS, "mod-config-provider")}
+            <label class="mod-config-label">Base URL</label>
+            <input class="mod-config-input" data-mod-config="apiEndpoint" type="url" spellcheck="false" placeholder="https://api.example.com/v1/chat/completions" readonly>
+            <div class="mod-config-label mod-config-api-key-label">
+              <span>API Key</span>
+              <a class="mod-config-api-key-link" target="_blank" rel="noreferrer" hidden>Get API key</a>
+            </div>
+            <div class="mod-config-api-key-row">
+              <div class="mod-config-key-wrap">
+                <input class="mod-config-input" data-mod-config="apiKey" type="password" spellcheck="false" autocomplete="off" placeholder="Paste your key here...">
+                <button type="button" class="mod-config-eye" title="Show API Key" aria-label="Show API Key">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                    <circle cx="12" cy="12" r="2.6"></circle>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <label class="mod-config-label">Model</label>
+            <div class="mod-config-model-wrap">
+              <input class="mod-config-input" data-mod-config="model" type="text" spellcheck="false" placeholder="Focus to load models or type a model id">
+              <div class="mod-config-model-list" hidden></div>
             </div>
           </div>
-          <label class="mod-config-label">Model</label>
-          <div class="mod-config-model-wrap">
-            <input class="mod-config-input" data-mod-config="model" type="text" spellcheck="false" placeholder="Focus to load models or type a model id">
-            <div class="mod-config-model-list" hidden></div>
+        </div>
+        <div class="mod-config-assign-section">
+          <div class="mod-config-assign-header">
+            <span class="mod-config-assign-title">Module Assignment</span>
+            <button type="button" class="mod-config-apply-all" title="Apply the current card to all modules">一键统一</button>
+          </div>
+          <div class="mod-config-assign-grid" data-mod-config="assignGrid">
           </div>
         </div>
       </div>
@@ -1730,23 +2060,49 @@
           <input class="mod-config-import-file" type="file" accept="application/json,.json" hidden>
         </div>
         <span class="mod-config-status"></span>
-        <button type="button" class="mod-config-restore-common" hidden>Restore Common</button>
       </div>
     `;
     return section;
   }
-
+  function renderModuleAssignmentGrid(section, config) {
+    const grid = section.querySelector('[data-mod-config="assignGrid"]');
+    if (!grid) return;
+    const cardItems = buildCardDropdownItems(config, true);
+    grid.innerHTML = AI_MODULES.map((mod) => {
+      const assignedCardId = config.ai?.moduleProviderIds?.[mod.key] || "";
+      const selectedLabel = cardItems.find((i) => i.key === assignedCardId)?.label || "Use Default";
+      const options = cardItems.map((item) => {
+        const sel = item.key === assignedCardId ? ' data-selected="true"' : "";
+        return '<button type="button" class="mod-config-dropdown-option" role="option" data-value="' + escapeHtml(item.key) + '"' + sel + '>' + escapeHtml(item.label) + '</button>';
+      }).join("");
+      return '<div class="mod-config-assign-row">' +
+        '<span class="mod-config-assign-label">' + escapeHtml(mod.label) + '</span>' +
+        '<span class="mod-config-assign-cell">' +
+          '<div class="mod-config-dropdown" data-mod-dropdown="assign_' + escapeHtml(mod.key) + '">' +
+            '<input type="hidden" data-mod-config="assign_' + escapeHtml(mod.key) + '" value="' + escapeHtml(assignedCardId) + '">' +
+            '<button type="button" class="mod-config-dropdown-button" aria-haspopup="listbox" aria-expanded="false">' +
+              '<span class="mod-config-dropdown-label">' + escapeHtml(selectedLabel) + '</span>' +
+              '<span class="mod-config-dropdown-caret" aria-hidden="true">▾</span>' +
+            '</button>' +
+            '<div class="mod-config-dropdown-list" role="listbox" hidden>' + options + '</div>' +
+          '</div>' +
+        '</span>' +
+      '</div>';
+    }).join("");
+  }
   async function bindSection(section) {
     refreshStorageStatus(section);
     let config = await readConfig();
+    dispatchConfigUpdated(config);
     refreshStorageStatus(section);
 
+    // ---- persistConfig: saves current card (AI panel) or mod settings ----
     async function persistConfig(collectFromForm) {
       try {
         if (collectFromForm) {
           const panelKey = getInput(section, "configPanel").value || "ai";
           if (panelKey === "ai") {
-            updateConfigFromForm(config, section);
+            saveCurrentCard(section, config);
           } else {
             config.mods[panelKey] = collectModSettings(section, panelKey);
           }
@@ -1754,19 +2110,87 @@
         await writeConfig(config);
         dispatchConfigUpdated(config);
         refreshStorageStatus(section);
+        if (window.VModToast?.show) {
+          window.VModToast.show("配置已保存", { type: "success", module: "ModConfig", timeout: 2000, id: "mod-config-saved" });
+        }
       } catch (error) {
         setStatus(section, "Auto-save failed: " + (error?.message || "Unknown error"), "error");
       }
     }
+
+    // ---- saveCurrentCard: collect form fields into the selected card ----
+    function saveCurrentCard(section, config) {
+      const cardId = getInput(section, "cardSelect")?.value;
+      if (!cardId) return;
+      const card = getProviderCardById(config, cardId);
+      if (!card) return;
+      card.name = getInput(section, "cardName")?.value.trim() || card.name;
+      card.provider = getInput(section, "provider")?.value || "";
+      card.apiEndpoint = getInput(section, "apiEndpoint")?.value.trim() || "";
+      card.apiKey = getInput(section, "apiKey")?.value.trim() || "";
+      card.model = getInput(section, "model")?.value.trim() || "";
+      // Update card name in dropdown label
+      const option = section.querySelector('[data-mod-dropdown="cardSelect"] [data-value="' + CSS.escape(cardId) + '"]');
+      if (option) option.textContent = card.name;
+    }
+
+    // ---- fillCardEditor: populate form fields from a card ----
+    function fillCardEditor(section, config, cardId) {
+      const card = getProviderCardById(config, cardId);
+      if (!card) return;
+      setDropdownValue(section, "cardSelect", cardId, false);
+      getInput(section, "cardName").value = card.name || "";
+      setDropdownValue(section, "provider", card.provider || "", false);
+      const urlInput = getInput(section, "apiEndpoint");
+      urlInput.value = card.apiEndpoint || "";
+      // Custom (empty provider key) → editable URL; otherwise readonly
+      const isCustom = !card.provider;
+      urlInput.readOnly = !isCustom;
+      getInput(section, "apiKey").value = card.apiKey || "";
+      getInput(section, "model").value = card.model || "";
+      section.dataset.previousProvider = card.provider || "";
+      hideModelList(section);
+      setApiKeyLink(section, card.provider || "");
+      const deleteBtn = section.querySelector(".mod-config-card-delete");
+      if (deleteBtn) deleteBtn.disabled = (cardId === config.ai?.defaultProviderId);
+    }
+
+    // ---- rebuildCardSelector: refresh card dropdown options ----
+    function rebuildCardSelector(section, config, preserveSelection) {
+      const currentId = preserveSelection ? getInput(section, "cardSelect")?.value : null;
+      const items = (config.ai?.providers || []).map((card) => ({ key: card.id, label: card.name }));
+      const dropdown = section.querySelector('[data-mod-dropdown="cardSelect"]');
+      if (!dropdown) return;
+      const list = dropdown.querySelector(".mod-config-dropdown-list");
+      if (list) {
+        list.innerHTML = items.map((item) =>
+          '<button type="button" class="mod-config-dropdown-option" role="option" data-value="' + escapeHtml(item.key) + '">' + escapeHtml(item.label) + '</button>'
+        ).join("");
+      }
+      const targetId = currentId && items.some((i) => i.key === currentId) ? currentId : (items[0]?.key || "");
+      setDropdownValue(section, "cardSelect", targetId, false);
+    }
+
+    // ---- Initialize AI pane ----
+    function initAiPane() {
+      rebuildCardSelector(section, config, false);
+      const firstCardId = config.ai?.providers?.[0]?.id;
+      if (firstCardId) fillCardEditor(section, config, firstCardId);
+      renderModuleAssignmentGrid(section, config);
+      setContextHint(section, COMMON_KEY);
+    }
+
     setTopPanel(section, "workspaceThemeSwitcher");
     getInput(section, "configPanel").dataset.prevPanel = "workspaceThemeSwitcher";
-    fillForm(section, config, COMMON_KEY);
+    initAiPane();
     renderModSettingsForm(section, config, "workspaceThemeSwitcher");
+
+    // ---- Panel switcher ----
     getInput(section, "configPanel").addEventListener("change", () => {
       const panelKey = getInput(section, "configPanel").value || "ai";
       const prevPanel = getInput(section, "configPanel").dataset.prevPanel || "ai";
       if (prevPanel === "ai") {
-        updateConfigFromForm(config, section);
+        saveCurrentCard(section, config);
       } else {
         config.mods[prevPanel] = collectModSettings(section, prevPanel);
       }
@@ -1776,67 +2200,73 @@
       if (panelKey !== "ai") {
         renderModSettingsForm(section, config, panelKey);
       }
-      updateRestoreCommonVisibility(section);
     });
-    getInput(section, "module").addEventListener("change", () => {
-      fillForm(section, config, getSelectedModule(section));
-      persistConfig(true);
+
+    // ---- Card selector change ----
+    getInput(section, "cardSelect").addEventListener("change", () => {
+      const cardId = getInput(section, "cardSelect").value;
+      if (cardId) fillCardEditor(section, config, cardId);
     });
+
+    // ---- Provider change (auto-fill endpoint + name) ----
     getInput(section, "provider").addEventListener("change", () => {
-      const moduleKey = getSelectedModule(section);
-      const previousProvider = section.dataset.previousProvider || "";
       const nextProviderKey = getInput(section, "provider").value;
-      if (!previousProvider) {
-        customDrafts.set(moduleKey, Object.assign(collectForm(section), { provider: "" }));
-      }
-      if (!nextProviderKey) {
-        applyBlockToForm(section, getCustomFallbackBlock(config, moduleKey));
-        section.dataset.resetToCommon = "";
-        persistConfig(true);
-        return;
-      }
       const provider = getProvider(nextProviderKey);
-      if (provider.apiEndpoint) {
-        getInput(section, "apiEndpoint").value = provider.apiEndpoint;
+      const urlInput = getInput(section, "apiEndpoint");
+      if (nextProviderKey) {
+        // Named provider → readonly URL, auto-fill
+        urlInput.readOnly = true;
+        if (provider.apiEndpoint) urlInput.value = provider.apiEndpoint;
+        // Auto-fill card name from provider label
+        const nameInput = getInput(section, "cardName");
+        if (!nameInput.value || nameInput.value === getProvider(section.dataset.previousProvider || "").label) {
+          nameInput.value = provider.label;
+        }
+        getInput(section, "apiKey").value = "";
+        getInput(section, "model").value = "";
+      } else {
+        // Custom → editable URL
+        urlInput.readOnly = false;
+        urlInput.value = "";
       }
-      getInput(section, "apiKey").value = "";
-      getInput(section, "model").value = "";
       setApiKeyLink(section, provider.key);
-      section.dataset.previousProvider = provider.key;
-      section.dataset.resetToCommon = "";
-      updateRestoreCommonVisibility(section);
+      section.dataset.previousProvider = nextProviderKey;
       hideModelList(section);
-      persistConfig(true);
+      saveCurrentCard(section, config);
+      persistConfig(false);
     });
+
+    // ---- Model focus → fetch models ----
     getInput(section, "model").addEventListener("focus", () => {
       fetchModelsForForm(section);
     });
+
+    // ---- Debounced auto-save for card fields ----
     let persistTimer = null;
     function debouncedPersist() {
       clearTimeout(persistTimer);
       persistTimer = setTimeout(() => persistConfig(true), 500);
     }
-    ["apiEndpoint", "apiKey", "model"].forEach((name) => {
-      getInput(section, name).addEventListener("input", () => {
-        rememberCustomDraft(section);
+    ["cardName", "apiEndpoint", "apiKey", "model"].forEach((name) => {
+      getInput(section, name)?.addEventListener("input", () => {
         debouncedPersist();
       });
     });
+
+    // ---- Model list click ----
     getInput(section, "model").addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        hideModelList(section);
-      }
+      if (event.key === "Escape") hideModelList(section);
     });
-    section.querySelector(".mod-config-model-list").addEventListener("mousedown", (event) => {
+    section.querySelector(".mod-config-model-list")?.addEventListener("mousedown", (event) => {
       const option = event.target.closest(".mod-config-model-option");
-      if (!option) {
-        return;
-      }
+      if (!option) return;
       event.preventDefault();
       getInput(section, "model").value = option.dataset.model || "";
       hideModelList(section);
       persistConfig(true);
     });
+
+    // ---- General click handler (dropdowns, file pickers) ----
     section.addEventListener("click", (event) => {
       const fileButton = event.target.closest("[data-mod-file-picker]");
       if (fileButton) {
@@ -1852,72 +2282,156 @@
         hideModelList(section);
         dropdown.classList.toggle("is-open", !isOpen);
         dropdownButton.setAttribute("aria-expanded", String(!isOpen));
-        if (list) {
-          list.hidden = isOpen;
-        }
+        if (list) list.hidden = isOpen;
         return;
       }
+      // Setting dropdown options (mod settings)
       const settingOption = event.target.closest(".mod-config-setting-dropdown .mod-config-dropdown-option");
       if (settingOption) {
         const dropdown = settingOption.closest(".mod-config-setting-dropdown");
         const input = dropdown.querySelector("[data-mod-setting]");
         const value = settingOption.dataset.value || "";
-        if (!input) {
-          return;
-        }
+        if (!input) return;
         if (dropdown.dataset.multiple === "true") {
           const values = new Set(parseListValue(input.value));
-          if (values.has(value)) {
-            values.delete(value);
-          } else {
-            values.add(value);
-          }
+          if (values.has(value)) values.delete(value); else values.add(value);
           input.value = Array.from(values).join(",");
-          dropdown.querySelectorAll(".mod-config-dropdown-option").forEach((option) => {
-            option.dataset.selected = values.has(option.dataset.value) ? "true" : "false";
+          dropdown.querySelectorAll(".mod-config-dropdown-option").forEach((opt) => {
+            opt.dataset.selected = values.has(opt.dataset.value) ? "true" : "false";
           });
           updateSettingDropdownLabel(dropdown);
           input.dispatchEvent(new Event("change", { bubbles: true }));
           return;
         }
         input.value = value;
-        dropdown.querySelectorAll(".mod-config-dropdown-option").forEach((option) => {
-          option.dataset.selected = option.dataset.value === value ? "true" : "false";
+        dropdown.querySelectorAll(".mod-config-dropdown-option").forEach((opt) => {
+          opt.dataset.selected = opt.dataset.value === value ? "true" : "false";
         });
         updateSettingDropdownLabel(dropdown);
         hideDropdowns(section);
         input.dispatchEvent(new Event("change", { bubbles: true }));
         return;
       }
+      // General dropdown options (card selector, module assignment, panel picker)
       const option = event.target.closest(".mod-config-dropdown-option");
-      if (!option) {
-        return;
-      }
+      if (!option) return;
       const dropdown = option.closest(".mod-config-dropdown");
       const name = dropdown?.dataset.modDropdown;
-      if (!name) {
-        return;
-      }
+      if (!name) return;
       setDropdownValue(section, name, option.dataset.value || "", true);
       hideDropdowns(section);
     });
-    section.querySelector(".mod-config-restore-common").addEventListener("click", () => {
-      restoreCommonForm(section, config);
-      persistConfig(true);
-      setStatus(section, "Common AI Config restored.", "ok");
+
+    // ---- Module assignment change → save assignment ----
+    section.addEventListener("change", (event) => {
+      const target = event.target;
+      const assignName = target.closest("[data-mod-config]")?.dataset.modConfig;
+      if (assignName && assignName.startsWith("assign_")) {
+        const moduleKey = assignName.slice(7);
+        const cardId = target.value || "";
+        if (!config.ai.moduleProviderIds) config.ai.moduleProviderIds = {};
+        if (cardId) {
+          config.ai.moduleProviderIds[moduleKey] = cardId;
+        } else {
+          delete config.ai.moduleProviderIds[moduleKey];
+        }
+        persistConfig(false);
+        return;
+      }
+      // Mod settings change
+      const panelKey = getInput(section, "configPanel").value || "ai";
+      if (panelKey === "ai") return;
+      if (target.closest("[data-mod-setting]") || target.closest("[data-ws-theme]")) {
+        if (target.type === "checkbox") {
+          const label = target.closest(".mod-config-switch")?.querySelector("span");
+          if (label) label.textContent = target.checked ? "Enabled" : "Disabled";
+        }
+        config.mods[panelKey] = collectModSettings(section, panelKey);
+        persistConfig(false);
+      }
     });
+
+    // ---- New card: show provider picker ----
+    const newList = section.querySelector(".mod-config-new-list");
+    section.querySelector(".mod-config-card-new").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wasOpen = !newList.hidden;
+      hideDropdowns(section);
+      newList.hidden = wasOpen;
+    });
+    if (newList) {
+      newList.addEventListener("click", (e) => {
+        const opt = e.target.closest(".mod-config-new-option");
+        if (!opt) return;
+        newList.hidden = true;
+        saveCurrentCard(section, config);
+        const providerKey = opt.dataset.providerKey || "";
+        const provider = getProvider(providerKey);
+        const newCard = normalizeProviderCard({
+          name: provider.label || "Custom",
+          provider: providerKey,
+          apiEndpoint: provider.apiEndpoint || "",
+        });
+        config.ai.providers.push(newCard);
+        rebuildCardSelector(section, config, false);
+        setDropdownValue(section, "cardSelect", newCard.id, false);
+        fillCardEditor(section, config, newCard.id);
+        renderModuleAssignmentGrid(section, config);
+        persistConfig(false);
+        setStatus(section, "Card created: " + newCard.name, "ok");
+      });
+    }
+
+    // ---- Delete card button ----
+    section.querySelector(".mod-config-card-delete").addEventListener("click", () => {
+      const cardId = getInput(section, "cardSelect")?.value;
+      if (!cardId || cardId === config.ai?.defaultProviderId) return;
+      saveCurrentCard(section, config);
+      config.ai.providers = config.ai.providers.filter((c) => c.id !== cardId);
+      // Remove module assignments referencing this card
+      Object.keys(config.ai.moduleProviderIds || {}).forEach((key) => {
+        if (config.ai.moduleProviderIds[key] === cardId) delete config.ai.moduleProviderIds[key];
+      });
+      rebuildCardSelector(section, config, false);
+      const nextId = config.ai?.providers?.[0]?.id;
+      if (nextId) fillCardEditor(section, config, nextId);
+      renderModuleAssignmentGrid(section, config);
+      persistConfig(false);
+      setStatus(section, "Card deleted.", "ok");
+    });
+
+    // ---- 一键统一: apply current card to all modules ----
+    section.querySelector(".mod-config-apply-all").addEventListener("click", () => {
+      const cardId = getInput(section, "cardSelect")?.value;
+      if (!cardId) return;
+      saveCurrentCard(section, config);
+      // Set default to this card
+      config.ai.defaultProviderId = cardId;
+      // Clear all module overrides
+      config.ai.moduleProviderIds = {};
+      renderModuleAssignmentGrid(section, config);
+      persistConfig(false);
+      setStatus(section, "All modules set to: " + (getProviderCardById(config, cardId)?.name || "card"), "ok");
+    });
+
+    // ---- Export / Import ----
     section.querySelector(".mod-config-export").addEventListener("click", () => {
+      saveCurrentCard(section, config);
       exportConfigFile(section, config);
     });
     section.querySelector(".mod-config-import").addEventListener("click", async () => {
       const importedConfig = await chooseImportConfigFile(section);
-      if (!importedConfig) {
-        return;
-      }
+      if (!importedConfig) return;
       try {
         await writeConfig(importedConfig);
         config = await readConfig();
         refreshCurrentPanel(section, config);
+        if (getInput(section, "configPanel").value === "ai" || !getInput(section, "configPanel").value) {
+          rebuildCardSelector(section, config, false);
+          const firstId = config.ai?.providers?.[0]?.id;
+          if (firstId) fillCardEditor(section, config, firstId);
+          renderModuleAssignmentGrid(section, config);
+        }
         dispatchConfigUpdated(config);
         refreshStorageStatus(section);
         setStatus(section, "Config imported and applied.", "ok");
@@ -1927,14 +2441,18 @@
     });
     section.querySelector(".mod-config-import-file").addEventListener("change", async (event) => {
       const file = event.target.files?.[0];
-      if (!file) {
-        return;
-      }
+      if (!file) return;
       try {
         const importedConfig = await readConfigFromFile(file);
         await writeConfig(importedConfig);
         config = await readConfig();
         refreshCurrentPanel(section, config);
+        if (getInput(section, "configPanel").value === "ai" || !getInput(section, "configPanel").value) {
+          rebuildCardSelector(section, config, false);
+          const firstId = config.ai?.providers?.[0]?.id;
+          if (firstId) fillCardEditor(section, config, firstId);
+          renderModuleAssignmentGrid(section, config);
+        }
         dispatchConfigUpdated(config);
         refreshStorageStatus(section);
         setStatus(section, "Config imported and applied.", "ok");
@@ -1944,37 +2462,18 @@
         event.target.value = "";
       }
     });
-    ["apiEndpoint", "apiKey", "model", "provider"].forEach((name) => {
-      getInput(section, name).addEventListener("input", () => {
-        section.dataset.resetToCommon = "";
-      });
-      getInput(section, name).addEventListener("change", () => {
-        section.dataset.resetToCommon = "";
-      });
-    });
-    section.addEventListener("change", (event) => {
-      const target = event.target;
-      const panelKey = getInput(section, "configPanel").value || "ai";
-      if (panelKey === "ai") {
-        return;
-      }
-      if (target.closest("[data-mod-setting]") || target.closest("[data-ws-theme]")) {
-        if (target.type === "checkbox") {
-          const label = target.closest(".mod-config-switch")?.querySelector("span");
-          if (label) {
-            label.textContent = target.checked ? "Enabled" : "Disabled";
-          }
-        }
-        config.mods[panelKey] = collectModSettings(section, panelKey);
-        persistConfig(false);
-      }
-    });
+
+    // ---- Outside click → close dropdowns ----
     document.addEventListener("mousedown", (event) => {
       if (!section.contains(event.target)) {
         hideDropdowns(section);
         hideModelList(section);
+        const nl = section.querySelector(".mod-config-new-list");
+        if (nl) nl.hidden = true;
       }
     });
+
+    // ---- API Key eye toggle ----
     section.querySelector(".mod-config-eye").addEventListener("click", (event) => {
       const input = getInput(section, "apiKey");
       const showing = input.type === "text";

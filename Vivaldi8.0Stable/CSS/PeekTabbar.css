@@ -15,156 +15,141 @@
 /* ================================================ */
 
 :root {
-  --animation-test-speed: 120ms;
+  --peek-collapsed-pct: 18%;
+  --peek-expanded-pct: 82%;
+  --peek-speed: 120ms;
 }
 
-body:is(
-    :has(#tabs-tabbar-container.left),
-    :has(#tabs-tabbar-container.right)
-  ):has(#tabs-subcontainer)
-  #tabs-container {
-  max-width: 18%;
-  min-width: 18%;
-  transition: min-width var(--animation-test-speed) ease-in 300ms,
-    max-width var(--animation-test-speed) ease-in 300ms;
-}
-
-body:is(
-    :has(#tabs-tabbar-container.left),
-    :has(#tabs-tabbar-container.right)
-  ):has(#tabs-container)
-  #tabs-subcontainer {
-  max-width: 82%;
-  min-width: 82%;
-  transition: min-width var(--animation-test-speed) ease-in 300ms,
-    max-width var(--animation-test-speed) ease-in 300ms;
-  transform-origin: left center !important;
-}
-
-body:is(
-    :has(#tabs-tabbar-container.left),
-    :has(#tabs-tabbar-container.right)
-  ):has(#tabs-subcontainer)
-  #tabs-container:hover {
-  max-width: 82% !important;
-  min-width: 82% !important;
-  transition: min-width var(--animation-test-speed) ease-out 300ms,
-    max-width var(--animation-test-speed) ease-out 300ms;
-}
-
-body:is(
-    :has(#tabs-tabbar-container.left),
-    :has(#tabs-tabbar-container.right)
-  ):has(#tabs-container:hover)
-  #tabs-subcontainer {
-  max-width: 18% !important;
-  min-width: 18% !important;
-  transition: min-width var(--animation-test-speed) ease-out 300ms,
-    max-width var(--animation-test-speed) ease-out 300ms;
-}
-
+/* ── Container query contexts ── */
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #tabs-container {
+  #tabs-subcontainer {
   container-type: inline-size;
-  container-name: tabs-container;
+  container-name: tabs-subcontainer;
 }
 
+/* ── Width transitions (min/max-width percentages for smooth flex animation) ── */
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(#tabs-subcontainer)
+  #tabs-container {
+  max-width: var(--peek-collapsed-pct);
+  min-width: var(--peek-collapsed-pct);
+  transition: min-width var(--peek-speed) ease-in 300ms, max-width var(--peek-speed) ease-in 300ms;
+}
+
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(#tabs-container)
+  #tabs-subcontainer {
+  max-width: var(--peek-expanded-pct);
+  min-width: var(--peek-expanded-pct);
+  transition: min-width var(--peek-speed) ease-in 300ms, max-width var(--peek-speed) ease-in 300ms;
+}
+
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(#tabs-subcontainer)
+  #tabs-container:hover {
+  max-width: var(--peek-expanded-pct) !important;
+  min-width: var(--peek-expanded-pct) !important;
+  transition: min-width var(--peek-speed) ease-out 300ms, max-width var(--peek-speed) ease-out 300ms;
+}
+
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(#tabs-container:hover)
+  #tabs-subcontainer {
+  max-width: var(--peek-collapsed-pct) !important;
+  min-width: var(--peek-collapsed-pct) !important;
+  transition: min-width var(--peek-speed) ease-out 300ms, max-width var(--peek-speed) ease-out 300ms;
+}
+
+/* ── Collapse: hide non-favicon elements ── */
 @container tabs-container (max-width: 120px) {
-  .toolbar-large .ToolbarButton-Button {
-    display: none !important;
-  }
+  .toolbar-large .ToolbarButton-Button { display: none !important; }
+  .tidy-stack-actions { display: none !important; }
+  .tab .stack-counter, .tab .close { display: none !important; }
+  .arcpeek-tab-button { display: none !important; }
+  .pinned-tab-divider, .tab-reset-pin-button, .pinned-tab-sublabel { display: none !important; }
 }
 
+@container tabs-subcontainer (max-width: 120px) {
+  .tidy-stack-actions { display: none !important; }
+  .tab .stack-counter, .tab .close { display: none !important; }
+  .arcpeek-tab-button { display: none !important; }
+  .pinned-tab-divider, .tab-reset-pin-button, .pinned-tab-sublabel { display: none !important; }
+}
+
+/* ── Scrollbar / SlideBar / misc ── */
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #browser
-  #tabs-tabbar-container.left
-  ::-webkit-scrollbar,
+  #browser #tabs-tabbar-container.left ::-webkit-scrollbar,
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #browser
-  #tabs-tabbar-container.right
-  ::-webkit-scrollbar {
+  #browser #tabs-tabbar-container.right ::-webkit-scrollbar {
   display: none;
 }
 
-body:is(
-    :has(#tabs-tabbar-container.left),
-    :has(#tabs-tabbar-container.right)
-  ):has(.auto-hide-wrapper)
-  #tabs-tabbar-container
-  .SlideBar {
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(.auto-hide-wrapper.has-tabbar)
+  #tabs-tabbar-container .SlideBar {
   display: none !important;
 }
 
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  .tabs-right#browser.density-on
-  .accordion-toggle-arrow:after,
+  .tabs-right#browser.density-on .accordion-toggle-arrow:after,
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  .tabs-right#browser.density-on
-  .tab-wrapper:after {
+  .tabs-right#browser.density-on .tab-wrapper:after {
   display: none !important;
 }
 
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
   #tabs-tabbar-container,
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #tabs-tabbar-container
-  * {
+  #tabs-tabbar-container * {
   -webkit-app-region: no-drag !important;
 }
 
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #tabs-tabbar-container
-  .toolbar-spacer,
+  #tabs-tabbar-container .toolbar-spacer,
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #tabs-tabbar-container
-  .toolbar-spacer-flexible,
+  #tabs-tabbar-container .toolbar-spacer-flexible,
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #tabs-tabbar-container
-  .toolbar-spacer-panel,
+  #tabs-tabbar-container .toolbar-spacer-panel,
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #tabs-tabbar-container
-  .toolbar-divider {
+  #tabs-tabbar-container .toolbar-divider {
   -webkit-app-region: no-drag !important;
 }
 
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #tabs-tabbar-container
-  .button-ntp,
+  #tabs-tabbar-container .button-ntp,
 body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right))
-  #tabs-tabbar-container
-  .tab-header {
+  #tabs-tabbar-container .tab-header {
   -webkit-app-region: no-drag !important;
 }
 
-body:is(
-    :has(#tabs-tabbar-container.left),
-    :has(#tabs-tabbar-container.right)
-  ):has(#tabs-subcontainer):has(
-    #tabs-tabbar-container .ToolbarButton-Button.button-pressed
-  )
+/* Button-pressed: expand tabs, collapse subcontainer */
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(#tabs-subcontainer):has(#tabs-tabbar-container .ToolbarButton-Button.button-pressed)
   #tabs-container {
-  max-width: 82% !important;
-  min-width: 82% !important;
+  max-width: var(--peek-expanded-pct) !important;
+  min-width: var(--peek-expanded-pct) !important;
   transition: min-width 200ms ease-out 300ms, max-width 200ms ease-out 300ms;
 }
 
-body:is(
-    :has(#tabs-tabbar-container.left),
-    :has(#tabs-tabbar-container.right)
-  ):has(#tabs-subcontainer):has(
-    #tabs-tabbar-container .ToolbarButton-Button.button-pressed
-  )
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(#tabs-subcontainer):has(#tabs-tabbar-container .ToolbarButton-Button.button-pressed)
   #tabs-subcontainer {
-  max-width: 18% !important;
-  min-width: 18% !important;
+  max-width: var(--peek-collapsed-pct) !important;
+  min-width: var(--peek-collapsed-pct) !important;
   transition: min-width 200ms ease-out 300ms, max-width 200ms ease-out 300ms;
 }
 
-body:is(
-    :has(#tabs-tabbar-container.left),
-    :has(#tabs-tabbar-container.right)
-  ):has(#vivaldi-tooltip:hover)
-  .auto-hide-wrapper.has-tabbar {
+/* Stack editor open */
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(#tabs-subcontainer):has(.StackEditor)
+  #tabs-container {
+  max-width: var(--peek-expanded-pct) !important;
+  min-width: var(--peek-expanded-pct) !important;
+  transition: min-width 200ms ease-out 300ms, max-width 200ms ease-out 300ms;
+}
+
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(#tabs-subcontainer):has(.StackEditor)
+  #tabs-subcontainer {
+  max-width: var(--peek-collapsed-pct) !important;
+  min-width: var(--peek-collapsed-pct) !important;
+  transition: min-width 200ms ease-out 300ms, max-width 200ms ease-out 300ms;
+}
+
+/* Auto-hide tooltip hover */
+body:is(:has(#tabs-tabbar-container.left), :has(#tabs-tabbar-container.right)):has(#vivaldi-tooltip:hover)
+  .auto-hide-wrapper.has-tabbar.show {
   transition: transform 200ms cubic-bezier(0.25, 0.8, 0.25, 1.08) !important;
   transform: translateX(0) !important;
 }

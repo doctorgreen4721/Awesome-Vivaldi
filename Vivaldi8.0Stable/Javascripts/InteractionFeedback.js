@@ -579,10 +579,13 @@
     function triggerPulse() {
       if (!CONFIG.autoHidePulse.enabled) return;
       if (_arcPeekOpening) return;
+      // Skip if BetterAnimation is revealing — don't interrupt
       const now = Date.now();
       if (now - lastPulseTime < CONFIG.autoHidePulse.cooldownMs) return;
       const wrapper = document.querySelector(".auto-hide-wrapper.has-tabbar");
       if (!wrapper || wrapper.matches(":hover")) return;
+      const tabbar = wrapper.querySelector("#tabs-tabbar-container");
+      if (tabbar && (tabbar.classList.contains("ba-reveal") || tabbar.classList.contains("ba-ready"))) return;
       lastPulseTime = now;
       wrapper.classList.add("show");
       setTimeout(() => {

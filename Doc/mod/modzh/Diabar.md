@@ -36,8 +36,8 @@
 | `indexedDB` | 持久化存储 directory handle（数据库名 `ask-in-page-storage`，store `keyval`） |
 | `FileSystem Access API` | 对话历史、配置文件的文件系统读写（目录 `.askonpage`） |
 | `navigator.clipboard` | 读取剪贴板中的文件（图片/文本） |
-| `ReadableStream` + `getReader()` | SSE 流式读取 AI 响应 |
-| `AbortController` | 取消正在进行的 API 请求 |
+| `VividAI.js` | 共享 AI 配置与 API 调用；思考模式保持开启（唯一保留推理展示的模组） |
+| `VividMarkdown.js` | 共享 Markdown 渲染器（LaTeX、代码高亮、流式分割） |
 | `ResizeObserver` | Panel 尺寸变化监听 |
 | `MutationObserver` | `#panels .webpanel-stack` DOM 变化检测，触发 UI 更新 |
 | `requestAnimationFrame` | 打字机动画、滚动对齐 |
@@ -47,8 +47,8 @@
 | 模组 | 关系 | 说明 |
 |------|------|------|
 | `VModToast` | 可选 | 通过 `window.VModToast?.show()` 调用，不存在时静默降级 |
-
-无外部 JS 库依赖，完全自包含。
+| `VividAI.js` | 必需 | 共享 AI 配置与 API 调用；思考模式保持开启（唯一保留推理展示的模组） |
+| `VividMarkdown.js` | 必需 | 共享 Markdown 渲染器（LaTeX、代码高亮、流式分割） |
 
 ---
 

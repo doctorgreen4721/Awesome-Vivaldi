@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AskOnPage
 // @description  Ctrl+F to ask the page anything. AI-powered page search with inline citations.
-// @version      2026.7.19
+// @version      2026.7.21
 // @author       Ryan (Acid)
 // @website      https://github.com/PaRr0tBoY/Awesome-Vivaldi
 // ==/UserScript==
@@ -10,18 +10,11 @@
   "use strict";
 
   // ==================== AI Configuration ====================
-  const AI_CONFIG = {
-    apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
-    apiKey: "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",
-    model: "meta-llama/llama-3.3-70b-instruct:free",
-    fallbackModel: "google/gemma-4-26b-a4b-it:free",
-    timeout: 30000,
-    temperature: 0.3,
-    maxTokens: 2048,
-  };
-  const MOD_AI_CONFIG_KEY = "askOnPage";
-  const MOD_AI_CONFIG_FILE = "config.json";
-  const MOD_AI_CONFIG_DIR = ".askonpage";
+  // Depends on VividAI.js — shared AI config and API caller
+  VividAI.loadConfig({ modKey: "askOnPage" });
+  window.addEventListener("vivaldi-mod-ai-config-updated", (e) => {
+    VividAI.applyConfig(e.detail || {});
+  });
 
   // ==================== Constants ====================
   const BAR_ID = "ai-find-bar";
@@ -54,27 +47,6 @@
   // Cached page content for citation detection
   let pageContent = "";
 
-  // ==================== Shared AI Config ====================
-  function applySharedAiConfig(raw) {
-    const aiRoot = raw?.ai && typeof raw.ai === "object" ? raw.ai : raw || {};
-    const base = aiRoot.default && typeof aiRoot.default === "object" ? aiRoot.default : aiRoot;
-    const override = aiRoot.overrides?.[MOD_AI_CONFIG_KEY] && typeof aiRoot.overrides[MOD_AI_CONFIG_KEY] === "object"
-      ? aiRoot.overrides[MOD_AI_CONFIG_KEY]
-      : {};
-    const source = Object.assign({}, base, override);
-    ["apiEndpoint", "apiKey", "model"].forEach((key) => {
-      if (typeof source[key] === "string") AI_CONFIG[key] = source[key].trim();
-    });
-  }
-
-  async function loadSharedAiConfig() {
-    try {
-      const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_AI_CONFIG_DIR, { create: true });
-      const fh = await dir.getFileHandle(MOD_AI_CONFIG_FILE, { create: false });
-      applySharedAiConfig(JSON.parse(await (await fh.getFile()).text()));
-    } catch (_) { /* use hardcoded defaults */ }
-  }
 
   // ==================== Page Content Extraction ====================
   function extractPage() {
@@ -278,14 +250,14 @@
 
   // ==================== AI Pipeline ====================
   async function askAI(query, page, retry = true) {
-    if (!AI_CONFIG.apiKey) return "在 ModConfig 中配置 API Key 后即可使用。";
+    if (!VividAI.config.apiKey) return "\u5728 ModConfig \u4e2d\u914d\u7f6e API Key \u540e\u5373\u53ef\u4f7f\u7528\u3002";
 
     const sys = [
       "You are a page assistant. Answer ONLY from the current webpage content below.",
       "If the page lacks the answer, say so directly. Never invent information.",
       "Be concise. Use Markdown.",
       "",
-      "CRITICAL — Citation style: weave quotes INTO your paragraphs, NOT at the end.",
+      "CRITICAL \u2014 Citation style: weave quotes INTO your paragraphs, NOT at the end.",
       "For every factual point, immediately follow with the exact page quote on its own line:",
       "> \"exact words from the page\"",
       "",
@@ -301,7 +273,7 @@
       "> \"Tailwind CSS provides utility-first styling\"",
       "",
       "The user can click citations to jump to that text on the page.",
-      "CITATIONS MUST BE IN THE PAGE'S ORIGINAL LANGUAGE — word-for-word.",
+      "CITATIONS MUST BE IN THE PAGE'S ORIGINAL LANGUAGE \u2014 word-for-word.",
       "NEVER translate or modify quoted text. NEVER group citations at the end.",
       "Your answer may be in any language, but citations must match page language exactly.",
     ].join("\n");
@@ -324,79 +296,43 @@
     }
 
     abortCtrl = new AbortController();
-    const tid = setTimeout(() => abortCtrl.abort(), AI_CONFIG.timeout);
 
     try {
-      const res = await fetch(AI_CONFIG.apiEndpoint, {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + AI_CONFIG.apiKey,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://github.com/PaRr0tBoY/Awesome-Vivaldi",
-          "X-Title": "Awesome Vivaldi - AI Find Bar",
-        },
-        body: JSON.stringify({
-          model: AI_CONFIG.model,
-          stream: true,
-          temperature: AI_CONFIG.temperature,
-          max_tokens: AI_CONFIG.maxTokens,
-          messages: [
-            { role: "system", content: sys },
-            ...prev,
-            { role: "user", content: usr },
-          ],
-        }),
+      const { text } = await VividAI.streamChat({
+        messages: [
+          { role: "system", content: sys },
+          ...prev,
+          { role: "user", content: usr },
+        ],
         signal: abortCtrl.signal,
+        onDelta: (chunk, full) => {
+          streamText = full;
+          turns[turnIdx].answer = full;
+          refreshTurn(turnIdx);
+        },
+        temperature: VividAI.config.temperature,
+        maxTokens: VividAI.config.maxTokens,
+        timeout: VividAI.config.timeout,
+        extra: { thinking: { type: "disabled" } },
       });
-      clearTimeout(tid);
 
-      if (!res.ok) {
-        const e = await res.text().catch(() => "");
-        return "**AI 请求失败** HTTP " + res.status + (e ? " — " + e.slice(0, 160) : "");
+      // Detect empty/garbage responses \u2014 retry with fallback model once
+      const clean = text.replace(/User Safety:\s*safe|Response Safety:\s*safe|unsafe/gi, "").trim();
+      if (!clean && retry) {
+        return askAIFallback(query, page);
       }
-      const result = await streamSSE(res, retry ? () => askAIFallback(query, page) : null);
-      return result;
+      return clean || text;
     } catch (err) {
-      clearTimeout(tid);
       if (err?.name === "AbortError") return streamText || "";
-      return "**请求出错** " + (err?.message || "");
+      return "**\u8bf7\u6c42\u51fa\u9519** " + (err?.message || "");
     }
-  }
-
-  async function streamSSE(res, retryFn) {
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "", out = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split("\n");
-      buf = lines.pop() || "";
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t || !t.startsWith("data:")) continue;
-        const d = t.slice(5).trim();
-        if (d === "[DONE]") continue;
-        try {
-          const delta = JSON.parse(d)?.choices?.[0]?.delta?.content;
-          if (delta) { out += delta; streamText = out; turns[turnIdx].answer = out; refreshTurn(turnIdx); }
-        } catch (_) { /* skip */ }
-      }
-    }
-    // Detect empty/garbage responses — retry with fallback model once
-    const clean = out.replace(/User Safety:\s*safe|Response Safety:\s*safe|unsafe/gi, "").trim();
-    if (!clean && retryFn) {
-      return retryFn();
-    }
-    return clean || out;
   }
 
   function askAIFallback(query, page) {
-    const prevModel = AI_CONFIG.model;
-    AI_CONFIG.model = AI_CONFIG.fallbackModel;
+    const prevModel = VividAI.config.model;
+    VividAI.config.model = VividAI.config.fallbackModel;
     const promise = askAI(query, page, false);
-    promise.finally(() => { AI_CONFIG.model = prevModel; });
+    promise.finally(() => { VividAI.config.model = prevModel; });
     return promise;
   }
 
@@ -604,14 +540,11 @@
   function buildTurnHTML(i, q, a) {
     const aHtml = a ? mdToHtml(a) : '<div class="ai-find-loading"><span></span><span></span><span></span></div>';
     return '<div class="ai-find-turn" data-idx="' + i + '">' +
-      '<div class="ai-find-turn-q">' + escapeHtml(q) + '</div>' +
+      '<div class="ai-find-turn-q">' + VividMarkdown.escapeHtml(q) + '</div>' +
       '<div class="ai-find-turn-a">' + aHtml + '</div>' +
     '</div>';
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
 
   function showTurn(i) {
     if (i < 0 || i >= turns.length) return;
@@ -774,64 +707,22 @@
 
   function mdToHtml(t) {
     if (!t) return "";
-
-    // ── Pass 1: extract citation patterns BEFORE markdown, replace with placeholders ──
-    const cites = [];
-    const CID = "__CITE_";
-
-    // Blockquote-style: entire "> ..." lines
-    let h = t.replace(/^> "(.+)"[ \t]*$/gm, (_, text) => {
-      cites.push({ text, block: true });
-      return CID + (cites.length - 1);
-    });
-    // Blockquote without quotes: > some text (fallback)
-    h = h.replace(/^> (.+)$/gm, (_, text) => {
-      const stripped = text.replace(/^["「]|["」]$/g, "").trim();
-      if (stripped.length >= 8) {
-        cites.push({ text: stripped, block: true });
-        return CID + (cites.length - 1);
+    return VividMarkdown.render(t, {
+      blockquote: (lines) => {
+        const raw = lines.join(" ").trim();
+        const quotedMatch = raw.match(/^["\u300c](.+)["\u300d]$/);
+        if (quotedMatch) {
+          return '<p class="ai-find-cite">"' + VividMarkdown.escapeHtml(quotedMatch[1]) + '"</p>';
+        }
+        // Check if it looks like a citation (long enough blockquote text)
+        const stripped = raw.replace(/^["\u300c]|["\u300d]$/g, "").trim();
+        if (stripped.length >= 8) {
+          return '<p class="ai-find-cite">"' + VividMarkdown.escapeHtml(stripped) + '"</p>';
+        }
+        // Regular blockquote
+        return '<blockquote>' + VividMarkdown.render(lines.join("\n")) + '</blockquote>';
       }
-      return "<p>" + escapeHtml(text) + "</p>";
     });
-    // Inline quoted text: "long enough text"
-    h = h.replace(/"([^"]{10,200}?)"/g, (_, text) => {
-      cites.push({ text, block: false });
-      return CID + (cites.length - 1);
-    });
-    // Chinese quotes: 「long enough text」
-    h = h.replace(/「([^」]{8,200}?)」/g, (_, text) => {
-      cites.push({ text, block: false });
-      return CID + (cites.length - 1);
-    });
-
-    // ── Pass 2: standard markdown on remaining text ──
-    // Strip any remaining > prefix that wasn't captured as citation
-    h = h.replace(/^> /gm, "");
-    h = h
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/`([^`]+)`/g, "<code>$1</code>")
-      .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-      .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-      .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-      .replace(/^- (.+)$/gm, "<li>$1</li>")
-      .replace(/\n\n/g, "</p><p>")
-      .replace(/\n/g, "<br>");
-    h = h.replace(/((?:<li>.*?<\/li><br>?)+)/g, (m) => "<ul>" + m.replace(/<br>/g, "") + "</ul>");
-    if (h && !/^</.test(h)) h = "<p>" + h + "</p>";
-
-    // ── Pass 3: restore citations directly as safe HTML ──
-    h = h.replace(new RegExp(CID + "(\\d+)", "g"), (_, idx) => {
-      const c = cites[+idx];
-      if (!c) return "";
-      const safe = escapeHtml(c.text);
-      if (c.block) {
-        return '<p class="ai-find-cite">"' + safe + '"</p>';
-      }
-      return '<span class="ai-find-cite">"' + safe + '"</span>';
-    });
-
-    return h;
   }
 
   // ==================== Ctrl+F Toggle ====================
@@ -867,10 +758,11 @@
   }
 
   // ==================== Init ====================
+  // ==================== Init ====================
   function init() {
-    loadSharedAiConfig().catch(() => {});
+    VividAI.loadConfig({ modKey: "askOnPage" });
     window.addEventListener("vivaldi-mod-ai-config-updated", (e) => {
-      applySharedAiConfig(e.detail || {});
+      VividAI.applyConfig(e.detail || {});
     });
     registerShortcuts();
     buildBar();

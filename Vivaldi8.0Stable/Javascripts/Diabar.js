@@ -1,34 +1,11 @@
 // ==UserScript==
 // @name         Diabar
 // @description  AI sidebar chat panel. Page Q&A, summaries, and rewrites in a WebPanel.
-// @version      2026.4.18
+// @version      2026.7.21
 // @author       PaRr0tBoY
 // ==/UserScript==
 
 (() => {
-  
-
-  // ==================== AI Configuration ====================
-  // 1. Fill in apiKey.
-  // 2. Set apiEndpoint to the full chat completions URL.
-  // 3. Adjust model / timeout / maxTokens if needed.
-  // 4. If apiKey is empty, chat requests will stop with a config warning.
-  //
-  // Common examples:
-  // GLM: https://open.bigmodel.cn/api/paas/v4/chat/completions
-  // Groq: https://api.groq.com/openai/v1/chat/completions
-  // OpenRouter: https://openrouter.ai/api/v1/chat/completions
-  // DeepSeek: https://api.deepseek.com/chat/completions
-  const AI_CONFIG = {
-    apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
-    apiKey: "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",
-    model: "openrouter/free",
-    timeout: 90000,
-    temperature: 0.5,
-    maxTokens: 4096,
-  };
-  const ASK_IN_PAGE_CONFIG_FILE = 'config.json';
-  const MOD_AI_CONFIG_KEY = 'askInPage';
 
   const name = 'Ask in Page';
   const nameAttribute = 'ask-in-page';
@@ -308,7 +285,7 @@
       sendValidationEmpty: 'Add context with @history, @notes, a page, a file, selected text, or an existing conversation, then say what to do with it.',
       sendValidationNeedsInfo: 'Add the context to process, for example @history, @notes, a page, a file, selected text, or use this conversation after it has history.',
       sendValidationNeedsInstruction: 'Say what to do with this context, for example use a /command, add an @format, or type an instruction.',
-      apiKeyMissing: 'AI API key is not configured. Fill in apiKey in AI_CONFIG inside AskInPage.js.',
+      apiKeyMissing: 'AI API key is not configured. Fill in apiKey in config.json.',
       noDisplayBody: 'The model finished, but returned no displayable answer.',
       aiRequestFailed: 'AI request failed: {message}',
       unknownError: 'Unknown error',
@@ -687,43 +664,6 @@
     persistPromise: null,
   };
 
-  function sanitizeAiConfig(raw) {
-    const aiRoot = raw?.ai && typeof raw.ai === 'object' ? raw.ai : raw || {};
-    const base = aiRoot.default && typeof aiRoot.default === 'object' ? aiRoot.default : aiRoot;
-    const override = aiRoot.overrides?.[MOD_AI_CONFIG_KEY] && typeof aiRoot.overrides[MOD_AI_CONFIG_KEY] === 'object'
-      ? aiRoot.overrides[MOD_AI_CONFIG_KEY]
-      : {};
-    const source = Object.assign({}, base, override);
-    const nextConfig = {};
-    if (typeof source.apiEndpoint === 'string') {
-      nextConfig.apiEndpoint = source.apiEndpoint.trim();
-    }
-    if (typeof source.apiKey === 'string') {
-      nextConfig.apiKey = source.apiKey.trim();
-    }
-    if (typeof source.model === 'string') {
-      nextConfig.model = source.model.trim();
-    }
-    return nextConfig;
-  }
-
-  async function loadAskInPageConfig() {
-    const storageHandle = await ensureAskInPageStorageHandle({ interactive: false });
-    if (!storageHandle) {
-      return;
-    }
-    const config = await readJsonFromHandle(storageHandle, ASK_IN_PAGE_CONFIG_FILE);
-    applyAskInPageConfig(config);
-  }
-
-  function applyAskInPageConfig(config) {
-    const aiConfig = sanitizeAiConfig(config);
-    Object.keys(aiConfig).forEach((key) => {
-      if (aiConfig[key] !== undefined) {
-        AI_CONFIG[key] = aiConfig[key];
-      }
-    });
-  }
 
   const showToast = (message, options = {}) => {
     window.VModToast?.show(message, { module: "AskInPage", ...options });
@@ -1619,12 +1559,7 @@
       return getTokenVisibleText(part);
     }).join('');
   }
-
-  function cleanModelText(text) {
-    return String(text || '')
-      .replace(/<\s*(?:thought|reasoning|think|thinking)\s*>[\s\S]*?<\s*\/\s*(?:thought|reasoning|think|thinking)\s*>/gi, '')
-      .replace(/\r/g, '');
-  }
+  const cleanModelText = VividMarkdown.cleanModelText;
 
   function appendReasoningText(existingText, nextChunk) {
     const next = String(nextChunk || '');
@@ -1877,658 +1812,15 @@
     }
   }
 
-  function escapeHtml(text) {
-    return String(text || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
+  const escapeHtml = VividMarkdown.escapeHtml;
+  const LATEX_SYMBOLS = VividMarkdown.LATEX_SYMBOLS;
 
-  const LATEX_SYMBOLS = {
-    alpha: 'α',
-    beta: 'β',
-    gamma: 'γ',
-    delta: 'δ',
-    epsilon: 'ε',
-    varepsilon: 'ε',
-    zeta: 'ζ',
-    eta: 'η',
-    theta: 'θ',
-    vartheta: 'ϑ',
-    iota: 'ι',
-    kappa: 'κ',
-    lambda: 'λ',
-    mu: 'μ',
-    nu: 'ν',
-    xi: 'ξ',
-    pi: 'π',
-    varpi: 'ϖ',
-    rho: 'ρ',
-    varrho: 'ϱ',
-    sigma: 'σ',
-    varsigma: 'ς',
-    tau: 'τ',
-    upsilon: 'υ',
-    phi: 'φ',
-    varphi: 'ϕ',
-    chi: 'χ',
-    psi: 'ψ',
-    omega: 'ω',
-    Gamma: 'Γ',
-    Delta: 'Δ',
-    Theta: 'Θ',
-    Lambda: 'Λ',
-    Xi: 'Ξ',
-    Pi: 'Π',
-    Sigma: 'Σ',
-    Upsilon: 'Υ',
-    Phi: 'Φ',
-    Psi: 'Ψ',
-    Omega: 'Ω',
-    pm: '±',
-    mp: '∓',
-    times: '×',
-    div: '÷',
-    cdot: '·',
-    ast: '*',
-    le: '≤',
-    leq: '≤',
-    ge: '≥',
-    geq: '≥',
-    ne: '≠',
-    neq: '≠',
-    approx: '≈',
-    sim: '∼',
-    equiv: '≡',
-    infty: '∞',
-    partial: '∂',
-    nabla: '∇',
-    forall: '∀',
-    exists: '∃',
-    in: '∈',
-    notin: '∉',
-    subset: '⊂',
-    subseteq: '⊆',
-    superset: '⊃',
-    supset: '⊃',
-    supseteq: '⊇',
-    cup: '∪',
-    cap: '∩',
-    emptyset: '∅',
-    varnothing: '∅',
-    angle: '∠',
-    degree: '°',
-    prime: '′',
-    to: '→',
-    rightarrow: '→',
-    leftarrow: '←',
-    leftrightarrow: '↔',
-    Rightarrow: '⇒',
-    Leftarrow: '⇐',
-    Leftrightarrow: '⇔',
-    mapsto: '↦',
-    cdots: '⋯',
-    ldots: '…',
-    dots: '…',
-    land: '∧',
-    lor: '∨',
-    neg: '¬',
-    top: '⊤',
-    bot: '⊥',
-    perp: '⊥',
-    propto: '∝',
-    therefore: '∴',
-    because: '∵',
-  };
-  const LATEX_OPERATORS = {
-    sin: 'sin',
-    cos: 'cos',
-    tan: 'tan',
-    cot: 'cot',
-    sec: 'sec',
-    csc: 'csc',
-    log: 'log',
-    ln: 'ln',
-    exp: 'exp',
-    lim: 'lim',
-    max: 'max',
-    min: 'min',
-    sup: 'sup',
-    inf: 'inf',
-    arg: 'arg',
-    det: 'det',
-    dim: 'dim',
-    gcd: 'gcd',
-  };
+  const renderInlineMarkdown = VividMarkdown.renderInlineMarkdown;
+  const highlightCode = VividMarkdown.highlightCode;
 
-  function splitLatexTopLevel(source, separator) {
-    const parts = [];
-    let depth = 0;
-    let current = '';
-    for (let index = 0; index < source.length; index += 1) {
-      const char = source[index];
-      if (char === '\\') {
-        if (separator === '\\\\' && source[index + 1] === '\\' && depth === 0) {
-          parts.push(current);
-          current = '';
-          index += 1;
-          continue;
-        }
-        current += char + (source[index + 1] || '');
-        index += 1;
-        continue;
-      }
-      if (char === '{') depth += 1;
-      if (char === '}') depth = Math.max(0, depth - 1);
-      if (separator === char && depth === 0) {
-        parts.push(current);
-        current = '';
-        continue;
-      }
-      current += char;
-    }
-    parts.push(current);
-    return parts;
-  }
+  const enhanceRenderedAnswer = (el) => VividMarkdown.enhanceCodeBlocks(el);
 
-  function renderLatexMatrix(source, displayMode) {
-    const matrixMatch = String(source || '').match(/\\begin\{(p|b|v|V)?matrix\}([\s\S]*?)\\end\{(?:p|b|v|V)?matrix\}/);
-    if (!matrixMatch) {
-      return '';
-    }
-    const kind = matrixMatch[1] || '';
-    const body = matrixMatch[2] || '';
-    const rows = splitLatexTopLevel(body, '\\\\')
-      .map((row) => splitLatexTopLevel(row, '&').map((cell) => cell.trim()))
-      .filter((row) => row.some(Boolean));
-    const fences = {
-      p: ['(', ')'],
-      b: ['[', ']'],
-      v: ['|', '|'],
-      V: ['‖', '‖'],
-    }[kind] || ['', ''];
-    const columnCount = Math.max(1, ...rows.map((row) => row.length));
-    return (
-      '<span class="ask-latex-matrix-wrap' + (displayMode ? ' display' : '') + '">' +
-      (fences[0] ? '<span class="ask-latex-matrix-fence">' + escapeHtml(fences[0]) + '</span>' : '') +
-      '<span class="ask-latex-matrix" style="grid-template-columns:repeat(' + columnCount + ', max-content)">' +
-      rows.map((row) => (
-        '<span class="ask-latex-matrix-row">' +
-        row.map((cell) => '<span class="ask-latex-matrix-cell">' + renderLatexToHtml(cell, false) + '</span>').join('') +
-        '</span>'
-      )).join('') +
-      '</span>' +
-      (fences[1] ? '<span class="ask-latex-matrix-fence">' + escapeHtml(fences[1]) + '</span>' : '') +
-      '</span>'
-    );
-  }
-
-  function renderLatexToHtml(source, displayMode) {
-    const raw = String(source || '').trim();
-    if (!raw) {
-      return '';
-    }
-    const matrix = renderLatexMatrix(raw, displayMode);
-    if (matrix) {
-      return matrix;
-    }
-    let index = 0;
-
-    const readCommand = () => {
-      index += 1;
-      const start = index;
-      while (index < raw.length && /[A-Za-z]/.test(raw[index])) {
-        index += 1;
-      }
-      if (index === start && index < raw.length) {
-        index += 1;
-      }
-      return raw.slice(start, index);
-    };
-
-    const skipWhitespace = () => {
-      while (index < raw.length && /\s/.test(raw[index])) {
-        index += 1;
-      }
-    };
-
-    const parseGroup = () => {
-      skipWhitespace();
-      if (raw[index] !== '{') {
-        return parseAtom();
-      }
-      index += 1;
-      const html = parseExpression('}');
-      if (raw[index] === '}') {
-        index += 1;
-      }
-      return html;
-    };
-
-    const parseOptionalGroup = () => {
-      skipWhitespace();
-      if (raw[index] !== '[') {
-        return '';
-      }
-      index += 1;
-      const start = index;
-      let depth = 1;
-      while (index < raw.length && depth > 0) {
-        if (raw[index] === '\\') {
-          index += 2;
-          continue;
-        }
-        if (raw[index] === '[') depth += 1;
-        if (raw[index] === ']') depth -= 1;
-        if (depth > 0) index += 1;
-      }
-      const value = raw.slice(start, index);
-      if (raw[index] === ']') {
-        index += 1;
-      }
-      return value;
-    };
-
-    const parseCommand = (command) => {
-      if (command === 'frac' || command === 'dfrac' || command === 'tfrac') {
-        const numerator = parseGroup();
-        const denominator = parseGroup();
-        return '<span class="ask-latex-frac"><span class="ask-latex-num">' + numerator + '</span><span class="ask-latex-den">' + denominator + '</span></span>';
-      }
-      if (command === 'sqrt') {
-        const degree = parseOptionalGroup();
-        const radicand = parseGroup();
-        return '<span class="ask-latex-sqrt">' + (degree ? '<span class="ask-latex-root-index">' + renderLatexToHtml(degree, false) + '</span>' : '') + '<span class="ask-latex-radicand">' + radicand + '</span></span>';
-      }
-      if (command === 'sum' || command === 'prod' || command === 'int' || command === 'oint') {
-        const symbols = { sum: '∑', prod: '∏', int: '∫', oint: '∮' };
-        return '<span class="ask-latex-largeop">' + symbols[command] + '</span>';
-      }
-      if (command === 'left' || command === 'right' || command === 'big' || command === 'Big' || command === 'bigl' || command === 'bigr' || command === 'Bigl' || command === 'Bigr') {
-        skipWhitespace();
-        if (raw[index] === '\\') {
-          return escapeHtml(LATEX_SYMBOLS[readCommand()] || '');
-        }
-        const delimiter = raw[index] || '';
-        index += delimiter ? 1 : 0;
-        return delimiter === '.' ? '' : '<span class="ask-latex-delim">' + escapeHtml(delimiter) + '</span>';
-      }
-      if (command === 'overline' || command === 'bar') {
-        return '<span class="ask-latex-overline">' + parseGroup() + '</span>';
-      }
-      if (command === 'underline') {
-        return '<span class="ask-latex-underline">' + parseGroup() + '</span>';
-      }
-      if (command === 'vec') {
-        return '<span class="ask-latex-vector">' + parseGroup() + '</span>';
-      }
-      if (command === 'text' || command === 'mathrm' || command === 'operatorname') {
-        return '<span class="ask-latex-text">' + parseGroup() + '</span>';
-      }
-      if (command === ',' || command === ';') return '<span class="ask-latex-space"></span>';
-      if (command === 'quad') return '<span class="ask-latex-quad"></span>';
-      if (command === 'qquad') return '<span class="ask-latex-qquad"></span>';
-      if (LATEX_OPERATORS[command]) {
-        return '<span class="ask-latex-op">' + escapeHtml(LATEX_OPERATORS[command]) + '</span>';
-      }
-      if (LATEX_SYMBOLS[command]) {
-        return escapeHtml(LATEX_SYMBOLS[command]);
-      }
-      return '<span class="ask-latex-cmd">' + escapeHtml(command) + '</span>';
-    };
-
-    const parseAtom = () => {
-      if (index >= raw.length) {
-        return '';
-      }
-      const char = raw[index];
-      if (char === '{') {
-        return parseGroup();
-      }
-      if (char === '\\') {
-        const command = readCommand();
-        return parseCommand(command);
-      }
-      if (char === '}') {
-        return '';
-      }
-      index += 1;
-      if (/\s/.test(char)) {
-        return '<span class="ask-latex-thinspace"></span>';
-      }
-      return escapeHtml(char);
-    };
-
-    const applyScripts = (base) => {
-      let sup = '';
-      let sub = '';
-      while (raw[index] === '^' || raw[index] === '_') {
-        const kind = raw[index];
-        index += 1;
-        const value = parseGroup();
-        if (kind === '^') {
-          sup = value;
-        } else {
-          sub = value;
-        }
-      }
-      if (!sup && !sub) {
-        return base;
-      }
-      return '<span class="ask-latex-scripted"><span class="ask-latex-script-base">' + base + '</span><span class="ask-latex-scripts">' + (sup ? '<sup>' + sup + '</sup>' : '') + (sub ? '<sub>' + sub + '</sub>' : '') + '</span></span>';
-    };
-
-    const parseExpression = (stopChar) => {
-      let html = '';
-      while (index < raw.length && raw[index] !== stopChar) {
-        if (raw[index] === '^' || raw[index] === '_') {
-          html += applyScripts('');
-          continue;
-        }
-        html += applyScripts(parseAtom());
-      }
-      return html;
-    };
-
-    return '<span class="ask-latex ask-latex-' + (displayMode ? 'display' : 'inline') + '">' + parseExpression('') + '</span>';
-  }
-
-  function renderInlineMarkdown(text) {
-    const latexPlaceholders = [];
-    const stashLatex = (html) => {
-      const key = '%%AIP_LATEX_' + latexPlaceholders.length + '%%';
-      latexPlaceholders.push(html);
-      return key;
-    };
-    let source = String(text || '');
-    source = source.replace(/\\\(([\s\S]+?)\\\)/g, (_, latex) => stashLatex('<span class="ask-latex-inline">' + renderLatexToHtml(latex, false) + '</span>'));
-    source = source.replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => stashLatex('<span class="ask-latex-block">' + renderLatexToHtml(latex, true) + '</span>'));
-    source = source.replace(/\$([^$\n]+)\$/g, (_, latex) => stashLatex('<span class="ask-latex-inline">' + renderLatexToHtml(latex, false) + '</span>'));
-    let output = escapeHtml(source);
-    output = output.replace(/`([^`]+)`/g, '<code>$1</code>');
-    output = output.replace(/\[\[([^\]]+)\]\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">[[$1]]</a>');
-    output = output.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
-    output = output.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    output = output.replace(/(^|[\s(])\*([^*]+)\*(?=$|[\s).,!?:;])/g, '$1<em>$2</em>');
-    output = output.replace(/==([^=]+)==/g, '<mark>$1</mark>');
-    latexPlaceholders.forEach((html, index) => {
-      output = output.replaceAll('%%AIP_LATEX_' + index + '%%', html);
-    });
-    return output;
-  }
-
-  function countIndent(line) {
-    const match = String(line || '').match(/^ */);
-    return match ? match[0].length : 0;
-  }
-
-  function isHrLine(line) {
-    return /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line || '');
-  }
-
-  function isTableSeparator(line) {
-    return /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*(?:\s*:?-{3,}:?\s*)?\|?\s*$/.test(line || '');
-  }
-
-  function parseTableRow(line) {
-    return String(line || '')
-      .trim()
-      .replace(/^\|/, '')
-      .replace(/\|$/, '')
-      .split('|')
-      .map((cell) => cell.trim());
-  }
-
-  function stripIndent(line, indent) {
-    const count = Math.min(countIndent(line), indent);
-    return String(line || '').slice(count);
-  }
-
-  function highlightCode(code, language) {
-    const escaped = escapeHtml(code);
-    const lang = String(language || '').toLowerCase();
-    if (lang === 'json') {
-      return escaped
-        .replace(/(&quot;.*?&quot;)(\s*:)/g, '<span class="ask-code-key">$1</span>$2')
-        .replace(/:\s*(&quot;.*?&quot;)/g, ': <span class="ask-code-string">$1</span>')
-        .replace(/\b(true|false|null)\b/g, '<span class="ask-code-keyword">$1</span>')
-        .replace(/\b(-?\d+(?:\.\d+)?)\b/g, '<span class="ask-code-number">$1</span>');
-    }
-    if (lang === 'js' || lang === 'javascript' || lang === 'ts' || lang === 'typescript') {
-      return escaped
-        .replace(/\b(const|let|var|function|return|if|else|await|async|import|from|export|class|new|throw|try|catch)\b/g, '<span class="ask-code-keyword">$1</span>')
-        .replace(/(&quot;.*?&quot;|&#39;.*?&#39;|`.*?`)/g, '<span class="ask-code-string">$1</span>')
-        .replace(/\b(-?\d+(?:\.\d+)?)\b/g, '<span class="ask-code-number">$1</span>');
-    }
-    if (lang === 'bash' || lang === 'sh' || lang === 'shell' || lang === 'zsh') {
-      return escaped
-        .replace(/^([$\w./-]+)/gm, '<span class="ask-code-keyword">$1</span>')
-        .replace(/(\s--?[\w-]+)/g, '<span class="ask-code-number">$1</span>')
-        .replace(/(&quot;.*?&quot;|&#39;.*?&#39;)/g, '<span class="ask-code-string">$1</span>');
-    }
-    return escaped;
-  }
-
-  function enhanceRenderedAnswer(container) {
-    container.querySelectorAll('pre > code').forEach((codeBlock) => {
-      const language = codeBlock.getAttribute('data-lang') || '';
-      const rawCode = codeBlock.textContent || '';
-      codeBlock.innerHTML = highlightCode(rawCode, language);
-      const pre = codeBlock.parentElement;
-      if (!pre || pre.querySelector('.ask-code-copy')) {
-        return;
-      }
-      const copyBtn = document.createElement('button');
-      copyBtn.type = 'button';
-      copyBtn.className = 'ask-code-copy';
-      copyBtn.textContent = 'Copy';
-      copyBtn.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(rawCode);
-          copyBtn.textContent = 'Copied';
-        } catch (error) {
-          const range = document.createRange();
-          range.selectNodeContents(codeBlock);
-          const selection = window.getSelection();
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-          try {
-            document.execCommand('copy');
-            copyBtn.textContent = 'Copied';
-          } catch (copyError) {
-            copyBtn.textContent = 'Failed';
-          }
-          selection?.removeAllRanges();
-        }
-        window.setTimeout(() => {
-          copyBtn.textContent = 'Copy';
-        }, 1200);
-      });
-      pre.appendChild(copyBtn);
-    });
-  }
-
-  function renderMarkdownToHtml(markdown) {
-    const source = String(markdown || '').replace(/\r/g, '');
-    if (!source.trim()) {
-      return '';
-    }
-    const lines = source.split('\n');
-
-    function parseBlocks(blockLines, baseIndent) {
-      const blocks = [];
-      let i = 0;
-
-      function parseList(startIndex) {
-        const firstLine = blockLines[startIndex];
-        const firstMatch = firstLine.match(/^(\s*)([-+*]|\d+\.)\s+(.*)$/);
-        if (!firstMatch) {
-          return null;
-        }
-        const listIndent = firstMatch[1].length;
-        const ordered = /\d+\./.test(firstMatch[2]);
-        const tag = ordered ? 'ol' : 'ul';
-        const items = [];
-        let index = startIndex;
-
-        while (index < blockLines.length) {
-          const line = blockLines[index];
-          const match = line.match(/^(\s*)([-+*]|\d+\.)\s+(.*)$/);
-          if (!match || match[1].length !== listIndent || (/\d+\./.test(match[2]) !== ordered)) {
-            break;
-          }
-          const taskMatch = match[3].match(/^\[( |x|X)]\s+(.*)$/);
-          const itemLines = [taskMatch ? taskMatch[2] : match[3]];
-          index += 1;
-          while (index < blockLines.length) {
-            const nextLine = blockLines[index];
-            if (!nextLine.trim()) {
-              itemLines.push('');
-              index += 1;
-              continue;
-            }
-            const nextMatch = nextLine.match(/^(\s*)([-+*]|\d+\.)\s+(.*)$/);
-            if (nextMatch && nextMatch[1].length === listIndent && (/\d+\./.test(nextMatch[2]) === ordered)) {
-              break;
-            }
-            if (countIndent(nextLine) <= listIndent && !/^>\s?/.test(nextLine)) {
-              break;
-            }
-            itemLines.push(stripIndent(nextLine, listIndent + 2));
-            index += 1;
-          }
-          const itemHtml = parseBlocks(itemLines, 0);
-          if (taskMatch) {
-            const checked = /[xX]/.test(taskMatch[1]);
-            items.push(
-              '<li class="ask-task-item">' +
-              '<span class="ask-task-box' + (checked ? ' checked' : '') + '" aria-hidden="true">' + (checked ? '✓' : '') + '</span>' +
-              '<span class="ask-task-content">' + itemHtml + '</span>' +
-              '</li>'
-            );
-          } else {
-            items.push('<li>' + itemHtml + '</li>');
-          }
-        }
-
-        return {
-          html: '<' + tag + '>' + items.join('') + '</' + tag + '>',
-          nextIndex: index,
-        };
-      }
-
-      while (i < blockLines.length) {
-        const originalLine = blockLines[i];
-        const line = stripIndent(originalLine, baseIndent);
-        if (!line.trim()) {
-          i += 1;
-          continue;
-        }
-        if (countIndent(originalLine) < baseIndent) {
-          break;
-        }
-        if (/^```/.test(line.trim())) {
-          const language = line.trim().slice(3).trim();
-          const codeLines = [];
-          i += 1;
-          while (i < blockLines.length && !/^```/.test(stripIndent(blockLines[i], baseIndent).trim())) {
-            codeLines.push(stripIndent(blockLines[i], baseIndent));
-            i += 1;
-          }
-          if (i < blockLines.length) {
-            i += 1;
-          }
-          blocks.push('<pre><code' + (language ? (' data-lang="' + escapeHtml(language) + '"') : '') + '>' + escapeHtml(codeLines.join('\n')) + '</code></pre>');
-          continue;
-        }
-        if (line.trim() === '$$' || line.trim() === '\\[') {
-          const closeMarker = line.trim() === '$$' ? '$$' : '\\]';
-          const latexLines = [];
-          i += 1;
-          while (i < blockLines.length && stripIndent(blockLines[i], baseIndent).trim() !== closeMarker) {
-            latexLines.push(stripIndent(blockLines[i], baseIndent));
-            i += 1;
-          }
-          if (i < blockLines.length) {
-            i += 1;
-          }
-          blocks.push('<div class="ask-latex-block">' + renderLatexToHtml(latexLines.join('\n'), true) + '</div>');
-          continue;
-        }
-        const heading = line.match(/^(#{1,4})\s+(.*)$/);
-        if (heading) {
-          const level = heading[1].length;
-          blocks.push('<h' + level + '>' + renderInlineMarkdown(heading[2]) + '</h' + level + '>');
-          i += 1;
-          continue;
-        }
-        if (isHrLine(line)) {
-          blocks.push('<hr>');
-          i += 1;
-          continue;
-        }
-        if (line.includes('|') && i + 1 < blockLines.length && isTableSeparator(stripIndent(blockLines[i + 1], baseIndent))) {
-          const headerCells = parseTableRow(line);
-          i += 2;
-          const rows = [];
-          while (i < blockLines.length) {
-            const rowLine = stripIndent(blockLines[i], baseIndent);
-            if (!rowLine.trim() || !rowLine.includes('|')) {
-              break;
-            }
-            rows.push(parseTableRow(rowLine));
-            i += 1;
-          }
-          blocks.push(
-            '<table><thead><tr>' + headerCells.map((cell) => '<th>' + renderInlineMarkdown(cell) + '</th>').join('') + '</tr></thead>' +
-            '<tbody>' + rows.map((row) => '<tr>' + row.map((cell) => '<td>' + renderInlineMarkdown(cell) + '</td>').join('') + '</tr>').join('') + '</tbody></table>'
-          );
-          continue;
-        }
-        if (/^>\s?/.test(line)) {
-          const quoteLines = [];
-          while (i < blockLines.length) {
-            const current = stripIndent(blockLines[i], baseIndent);
-            if (!/^>\s?/.test(current) && current.trim()) {
-              break;
-            }
-            quoteLines.push(current.replace(/^>\s?/, ''));
-            i += 1;
-            if (i < blockLines.length && !blockLines[i].trim()) {
-              quoteLines.push('');
-              i += 1;
-            }
-          }
-          blocks.push('<blockquote>' + parseBlocks(quoteLines, 0) + '</blockquote>');
-          continue;
-        }
-        const list = parseList(i);
-        if (list) {
-          blocks.push(list.html);
-          i = list.nextIndex;
-          continue;
-        }
-        const paragraph = [];
-        while (i < blockLines.length) {
-          const currentLine = stripIndent(blockLines[i], baseIndent);
-          if (!currentLine.trim()) {
-            break;
-          }
-          if (/^(#{1,4})\s+/.test(currentLine) || /^```/.test(currentLine.trim()) || isHrLine(currentLine) || /^>\s?/.test(currentLine) || currentLine.match(/^(\s*)([-+*]|\d+\.)\s+/) || (currentLine.includes('|') && i + 1 < blockLines.length && isTableSeparator(stripIndent(blockLines[i + 1], baseIndent)))) {
-            break;
-          }
-          paragraph.push(currentLine);
-          i += 1;
-        }
-        blocks.push('<p>' + renderInlineMarkdown(paragraph.join(' ')) + '</p>');
-      }
-      return blocks.join('');
-    }
-
-    return parseBlocks(lines, 0);
-  }
+  const renderMarkdownToHtml = (md) => VividMarkdown.render(md);
 
   async function renderRichAnswer(container, text) {
     const raw = String(text || '');
@@ -2624,83 +1916,7 @@
     container.dataset.src = normalized;
   }
 
-  function splitStableMarkdown(markdown) {
-    const source = String(markdown || '').replace(/\r/g, '');
-    if (!source) {
-      return { committed: '', preview: '' };
-    }
-    let committedEnd = 0;
-    let cursor = 0;
-
-    function findParagraphBoundary(start) {
-      const doubleNewlineIndex = source.indexOf('\n\n', start);
-      return doubleNewlineIndex === -1 ? -1 : doubleNewlineIndex + 2;
-    }
-
-    while (cursor < source.length) {
-      while (cursor < source.length && /\s/.test(source[cursor])) {
-        cursor += 1;
-      }
-      if (cursor >= source.length) {
-        break;
-      }
-
-      if (source.slice(cursor, cursor + 3) === '```') {
-        const fenceClose = source.indexOf('\n```', cursor + 3);
-        if (fenceClose === -1) {
-          break;
-        }
-        let nextCursor = fenceClose + 4;
-        if (source[nextCursor] === '\n') {
-          nextCursor += 1;
-        }
-        committedEnd = nextCursor;
-        cursor = nextCursor;
-        continue;
-      }
-
-      const lineEnd = source.indexOf('\n', cursor);
-      const firstLine = source.slice(cursor, lineEnd === -1 ? source.length : lineEnd);
-      const trimmedFirstLine = firstLine.trim();
-
-      // Keep complex markdown blocks in preview until the final render.
-      if (
-        /^(#{1,4})\s+/.test(trimmedFirstLine) ||
-        /^>\s?/.test(trimmedFirstLine) ||
-        /^(\s*)([-+*]|\d+\.)\s+/.test(firstLine) ||
-        (trimmedFirstLine.includes('|') && lineEnd !== -1)
-      ) {
-        break;
-      }
-
-      const paragraphBoundary = findParagraphBoundary(cursor);
-      if (paragraphBoundary === -1) {
-        break;
-      }
-      committedEnd = paragraphBoundary;
-      cursor = paragraphBoundary;
-    }
-
-    let committed = source.slice(0, committedEnd);
-    let preview = source.slice(committedEnd);
-    const previewTrimmed = preview.trimStart();
-    const hasComplexPreview = /(^|\n)(#{1,4}\s|>\s|[-*+]\s|\d+\.\s|\|)|```/.test(previewTrimmed);
-    if (!hasComplexPreview && preview.length >= STREAM_UI_CONFIG.stableTailCommitChars) {
-      const sentenceMatches = Array.from(preview.matchAll(/[\s\S]*?[。！？.!?](?=\s|$)/g));
-      const lastSentence = sentenceMatches.length ? sentenceMatches[sentenceMatches.length - 1][0] : '';
-      if (lastSentence && lastSentence.length >= 60) {
-        committed += lastSentence;
-        preview = preview.slice(lastSentence.length);
-      } else {
-        const breakIndex = Math.max(preview.lastIndexOf('\n'), preview.lastIndexOf('  '));
-        if (breakIndex >= 80) {
-          committed += preview.slice(0, breakIndex + 1);
-          preview = preview.slice(breakIndex + 1);
-        }
-      }
-    }
-    return { committed, preview };
-  }
+  const splitStableMarkdown = (md) => VividMarkdown.splitStable(md, { stableTailCommitChars: STREAM_UI_CONFIG.stableTailCommitChars });
 
   function renderStreamingMarkdown(answerNode, displayedText, fullText) {
     const liveNodes = ensureLiveAnswerNodes(answerNode);
@@ -4525,17 +3741,13 @@
         state.sessionTitleGenerated = true;
         return;
       }
-      if (!AI_CONFIG.apiKey) {
+      if (!VividAI.config.apiKey) {
         state.sessionTitleGenerated = true;
         return;
       }
       state.sessionTitlePending = true;
       try {
-        const body = {
-          model: AI_CONFIG.model,
-          stream: false,
-          temperature: 0.2,
-          max_tokens: 32,
+        const data = await VividAI.fetchJSON({
           messages: [
             {
               role: 'system',
@@ -4546,19 +3758,9 @@
               content: firstQuestion,
             },
           ],
-        };
-        const response = await fetch(AI_CONFIG.apiEndpoint, {
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer ' + AI_CONFIG.apiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
+          temperature: 0.2,
+          maxTokens: 32,
         });
-        if (!response.ok) {
-          throw new Error('title request failed');
-        }
-        const data = await response.json();
         const candidate = truncateText(cleanModelText(data?.choices?.[0]?.message?.content || '').replace(/\n+/g, ' ').trim(), 48);
         state.sessionTitle = candidate || buildFallbackSessionTitle(record);
       } catch (_error) {
@@ -4904,16 +4106,12 @@
     }
 
     async function generateMemoryCandidates(source) {
-      if (!AI_CONFIG.apiKey || !source?.content) {
+      if (!VividAI.config.apiKey || !source?.content) {
         const fallback = buildFallbackMemoryCandidate(source);
         return fallback ? [fallback] : [];
       }
       try {
-        const body = {
-          model: AI_CONFIG.model,
-          stream: false,
-          temperature: 0.2,
-          max_tokens: 700,
+        const data = await VividAI.fetchJSON({
           messages: [
             {
               role: 'system',
@@ -4924,19 +4122,9 @@
               content: source.content,
             },
           ],
-        };
-        const response = await fetch(AI_CONFIG.apiEndpoint, {
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer ' + AI_CONFIG.apiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
+          temperature: 0.2,
+          maxTokens: 700,
         });
-        if (!response.ok) {
-          throw new Error('memory request failed');
-        }
-        const data = await response.json();
         const raw = cleanModelText(data?.choices?.[0]?.message?.content || '').trim();
         const parsed = JSON.parse(raw.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim());
         const memories = Array.isArray(parsed?.memories) ? parsed.memories : [];
@@ -5315,7 +4503,7 @@
         uiVersion,
         app: 'AskInPage',
         manifest: tree[ASK_IN_PAGE_STORAGE.manifestName]?.value || null,
-        config: tree[ASK_IN_PAGE_CONFIG_FILE]?.value || null,
+        config: tree['config.json']?.value || null,
         sessions: tree.sessions?.children || {},
         indexes: tree.indexes?.children || {},
         memory: tree.memory?.children || {},
@@ -5335,7 +4523,7 @@
       }
       const importTree = snapshot.tree || {
         [ASK_IN_PAGE_STORAGE.manifestName]: snapshot.manifest ? { type: 'file', value: snapshot.manifest } : undefined,
-        [ASK_IN_PAGE_CONFIG_FILE]: snapshot.config ? { type: 'file', value: snapshot.config } : undefined,
+        'config.json': snapshot.config ? { type: 'file', value: snapshot.config } : undefined,
         sessions: { type: 'directory', children: snapshot.sessions || {} },
         indexes: { type: 'directory', children: snapshot.indexes || {} },
         memory: { type: 'directory', children: snapshot.memory || {} },
@@ -5365,7 +4553,7 @@
         removeEntryFromHandle(storageHandle, ['indexes']),
         removeEntryFromHandle(storageHandle, ['memory']),
         removePathFromHandle(storageHandle, ASK_IN_PAGE_STORAGE.manifestName),
-        removePathFromHandle(storageHandle, ASK_IN_PAGE_CONFIG_FILE),
+        removePathFromHandle(storageHandle, 'config.json'),
       ]);
       await restoreJsonTreeToHandle(storageHandle, [], importTree);
       await renderHistoryLists();
@@ -8094,12 +7282,12 @@
     }
 
     function createChatRequestBody(messages) {
-      const isBigModel = /bigmodel\.cn/.test(AI_CONFIG.apiEndpoint);
+      const isBigModel = /bigmodel\.cn/.test(VividAI.config.apiEndpoint);
       const body = {
-        model: AI_CONFIG.model,
+        model: VividAI.config.model,
         messages,
-        temperature: AI_CONFIG.temperature,
-        max_tokens: AI_CONFIG.maxTokens,
+        temperature: VividAI.config.temperature,
+        max_tokens: VividAI.config.maxTokens,
         stream: true,
         stream_options: { include_usage: true },
       };
@@ -8278,7 +7466,7 @@
       syncBusyState();
       scrollToBottom({ smooth: true });
 
-      if (!AI_CONFIG.apiKey) {
+      if (!VividAI.config.apiKey) {
         closeLoadingUi(scaffold);
         scaffold.answer.classList.add('ask-msg-ai-error');
         scaffold.answer.textContent = t('apiKeyMissing');
@@ -8355,11 +7543,11 @@
           compiledPrompt,
           requestBody: body,
           requestBodyJson: JSON.stringify(body, null, 2),
-          endpoint: maskApiEndpoint(AI_CONFIG.apiEndpoint),
+          endpoint: maskApiEndpoint(VividAI.config.apiEndpoint),
         });
       }
       const abortController = new AbortController();
-      const timeoutId = window.setTimeout(() => abortController.abort(), AI_CONFIG.timeout);
+      const timeoutId = window.setTimeout(() => abortController.abort(), VividAI.config.timeout);
       state.pendingAiTasks.set(turnData.id, { abortController, timeoutId });
       syncBusyState();
       let firstAnswerStartedAt = 0;
@@ -8462,15 +7650,16 @@
       }
 
       try {
-        const response = await fetch(AI_CONFIG.apiEndpoint, {
+        const response = await fetch(VividAI.config.apiEndpoint, {
           method: 'POST',
-          headers: {
-            Authorization: 'Bearer ' + AI_CONFIG.apiKey,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://github.com/Gershom-Chen/VivaldiModpack',
-            'X-Title': 'Vivaldi Ask in Page',
-          },
-          body: JSON.stringify(body),
+          headers: VividAI.buildHeaders(),
+          body: JSON.stringify(VividAI.buildBody({
+            messages: body.messages,
+            stream: true,
+            temperature: body.temperature,
+            maxTokens: body.max_tokens,
+            extra: body.extra,
+          })),
           signal: abortController.signal,
         });
         if (!response.ok) {
@@ -10339,12 +9528,12 @@
 
   waitForBrowser(() => {
     injectStyles();
-    loadAskInPageConfig().catch(() => {});
-    window.addEventListener('ask-in-page-config-updated', (event) => {
-      applyAskInPageConfig(event.detail || {});
+    VividAI.loadConfig({ modKey: "askInPage" });
+    window.addEventListener('ask-in-page-config-updated', (e) => {
+      VividAI.applyConfig(e.detail || {});
     });
-    window.addEventListener('vivaldi-mod-ai-config-updated', (event) => {
-      applyAskInPageConfig(event.detail || {});
+    window.addEventListener('vivaldi-mod-ai-config-updated', (e) => {
+      VividAI.applyConfig(e.detail || {});
     });
     if (isAskInPageTabUrl(location.href)) {
       ensureStandaloneUI();

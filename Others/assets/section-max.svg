@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="120" viewBox="0 0 1200 120"
+     role="img" aria-labelledby="max-title max-desc">
+  <title id="max-title">Vivaldi MAX</title>
+  <desc id="max-desc">Section header for AI-powered features.</desc>
+
+  <rect width="1200" height="120" fill="none"/>
+
+  <!-- Left accent bar -->
+  <rect x="0" y="40" width="4" height="40" rx="2" fill="#c4955e"/>
+
+  <!-- Section title -->
+  <text x="20" y="58" fill="#d8ded8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="28" font-weight="700">Vivaldi MAX</text>
+  <text x="234" y="58" fill="#c4955e" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="28" font-weight="700">AI Features</text>
+
+  <!-- Subtitle -->
+  <text x="20" y="86" fill="#8a908a" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="400">Tab grouping, title cleanup, download renaming, and page Q&A — all powered by any OpenAI-compatible API</text>
+
+  <!-- Decorative line -->
+  <rect x="0" y="108" width="1200" height="1" fill="#2f362f"/>
+</svg>

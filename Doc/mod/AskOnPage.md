@@ -7,7 +7,7 @@ English | [简体中文](modzh/AskOnPage.md)
 Ctrl+F reimagined — a universal page query bar that routes between native text find and AI-powered page understanding.
 
 > **File**: `AskOnPage.js` (~900 lines) + `AskOnPage.css` (~180 lines)
-> **Version**: 2026.7.19
+> **Version**: 2026.7.21
 > **Author**: Ryan (Acid)
 
 ---
@@ -53,6 +53,8 @@ Key insight: Ctrl+F is the browser's highest-frequency information-seeking actio
 |-----|-------------|
 | `ModConfig.js` | Shared AI config (`askOnPage` key). Overridable per-mod. |
 | `VividPeek.js` | Ctrl+F interception coexistence — does NOT intercept when Peek is active |
+- **VividAI.js** -- Shared AI configuration and SSE streaming; thinking disabled
+- **VividMarkdown.js** -- Shared Markdown renderer with citation hook (blockquote handler for AI-find-cite)
 
 ---
 

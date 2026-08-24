@@ -17,13 +17,14 @@ This document is based on [TidyTitles.js](/Vivaldi7.9Stable/Javascripts/TidyTitl
 
 ### External Dependencies
 
-- **OpenAI-compatible Chat Completions API** -- Called via `fetch`, supports GLM / Mimo / OpenRouter / DeepSeek endpoints
+- **VividAI.js** -- Shared AI configuration and API caller (replaces local AI_CONFIG)
 - **Browser native APIs**: `navigator.storage.getDirectory()` (OPFS), `chrome.i18n.getUILanguage()`
 
 ### Inter-mod Dependencies
 
 - **VividToast** (`window.VividToast.show`) -- Toast notification system
 - **TidyTabs** -- TidyTitles reads `vivExtData.tidyStackOwner === "TidyTabs"` to identify tab stacks managed by TidyTabs and avoid duplicate renaming
+- **VividAI.js** -- Shared AI configuration; thinking disabled
 
 ## 2. Features
 

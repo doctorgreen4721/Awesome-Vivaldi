@@ -7,7 +7,7 @@ English | [简体中文](modzh/Diabar.md)
 This document is based on the [Diabar.js](/Users/acid/Desktop/VivaldiModpack/Vivaldi7.9Stable/Javascripts/Diabar.js) in the current workspace.
 
 > **Scale**: 10424 lines / 447KB, the largest single-file mod in the project.
-> **Version**: v2026.4.18 / UI v74
+> **Version**: v2026.7.21 / UI v74
 > **Author**: PaRr0tBoY
 
 ---
@@ -48,6 +48,8 @@ Reference: [Doc/api/api.md](/Users/acid/Desktop/VivaldiModpack/Doc/api/api.md)
 |-----|-------------|-------------|
 | `VModToast` | Optional | Called via `window.VModToast?.show()`, silently degrades if unavailable |
 
+- **VividAI.js** -- Shared AI configuration and API caller; thinking ENABLED (the only module with reasoning display)
+- **VividMarkdown.js** -- Shared Markdown renderer (LaTeX, code highlighting, streaming split)
 No external JS library dependencies. Fully self-contained.
 
 ---

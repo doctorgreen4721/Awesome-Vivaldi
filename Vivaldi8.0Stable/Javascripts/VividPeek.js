@@ -2,7 +2,7 @@
 // @name         Arc Peek
 // @description  Opens links in a peek panel by holding the middle/right mouse button or modifier-clicking links.
 // @requirement  ArcPeek.css
-// @version      2026.7.13
+// @version      2026.7.21
 // @author       biruktes, tam710562, oudstand, PaRr0tBoY
 // @website      https://forum.vivaldi.net/post/897615
 // ==/UserScript==
@@ -92,41 +92,9 @@
     enabled: false,
   };
   // =========================
-  // AI Config (shared with Tidy Series via ModConfig)
+  // AI Config (VividAI shared module)
   // =========================
-  const PEEK_AI_CONFIG = {
-    apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
-    apiKey: "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",
-    model: "openrouter/free",
-    temperature: 0.3,
-    maxTokens: 4096,
-  };
-  const PEEK_AI_CONFIG_KEY = "arcPeek";
-
-  function applySharedAiConfig(raw) {
-    const aiRoot = raw?.ai ?? raw ?? {};
-    const base = aiRoot.default ?? aiRoot;
-    const override = aiRoot.overrides?.[PEEK_AI_CONFIG_KEY] ?? {};
-    const source = { ...base, ...override };
-    ["apiEndpoint", "apiKey", "model"].forEach((key) => {
-      if (typeof source[key] === "string" && source[key]) {
-        PEEK_AI_CONFIG[key] = source[key].trim();
-      }
-    });
-    if (typeof source.temperature === "number") PEEK_AI_CONFIG.temperature = source.temperature;
-    if (typeof source.maxTokens === "number") PEEK_AI_CONFIG.maxTokens = source.maxTokens;
-  }
-
-  async function loadSharedAiConfig() {
-    try {
-      const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_CONFIG_DIR, { create: true });
-      const fileHandle = await dir.getFileHandle(MOD_CONFIG_FILE, { create: false });
-      const file = await fileHandle.getFile();
-      applySharedAiConfig(JSON.parse(await file.text()));
-    } catch (_error) {}
-  }
-
+  VividAI.loadConfig({ modKey: "arcPeek", dir: ".askonpage" });
   const MOD_CONFIG_KEY = "arcPeek";
   const MOD_CONFIG_FILE = "config.json";
   const MOD_CONFIG_DIR = ".askonpage";
@@ -170,14 +138,13 @@
   }
 
   await loadSharedModConfig();
-  await loadSharedAiConfig();
+
   window.addEventListener("vivaldi-mod-config-updated", (event) => {
     applySharedModConfig(event.detail || {});
   });
-  window.addEventListener("vivaldi-mod-ai-config-updated", (event) => {
-    applySharedAiConfig(event.detail || {});
+  window.addEventListener("vivaldi-mod-ai-config-updated", (e) => {
+    VividAI.applyConfig(e.detail || {});
   });
-
   class PeekMod {
     ARC_CONFIG = Object.freeze({
       glanceOpenAnimationDuration: 260,
@@ -1242,7 +1209,7 @@
       this.disposePeek(webviewId, { animated: false, closeRuntimeTab: true, closeParallelTab: true });
     }
 
-    waitForTabComplete(tabId, timeoutMs = 12000) {
+    waitForTabReady(tabId, timeoutMs = 5000) {
       return new Promise((resolve) => {
         let settled = false;
         let timeoutId = null;
@@ -1252,9 +1219,9 @@
           settled = true;
           chrome.tabs.onUpdated.removeListener(handleUpdated);
           chrome.tabs.onRemoved.removeListener(handleRemoved);
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
+          chrome.webNavigation.onDOMContentLoaded.removeListener(handleDOMContent);
+          chrome.tabs.onActivated.removeListener(handleActivated);
+          clearTimeout(timeoutId);
           resolve(result);
         };
 
@@ -1270,8 +1237,22 @@
           finish("removed");
         };
 
+        const handleDOMContent = (details) => {
+          if (details.tabId === tabId && details.frameId === 0) {
+            finish("domcontentloaded");
+          }
+        };
+
+        const handleActivated = (activeInfo) => {
+          if (activeInfo.tabId !== tabId) {
+            finish("tab-switched");
+          }
+        };
+
         chrome.tabs.onUpdated.addListener(handleUpdated);
         chrome.tabs.onRemoved.addListener(handleRemoved);
+        chrome.webNavigation.onDOMContentLoaded.addListener(handleDOMContent);
+        chrome.tabs.onActivated.addListener(handleActivated);
         timeoutId = setTimeout(() => finish("timeout"), timeoutMs);
 
         chrome.tabs.get(tabId, (tab) => {
@@ -2556,6 +2537,16 @@
       const currentUrl = this.getPeekUrl(webviewId);
       if (!currentUrl) return null;
 
+      // Check source tab pinned state once — applied to whichever path succeeds.
+      const sourceTabId = this.getOwningTabId(data);
+      let sourcePinned = false;
+      if (sourceTabId) {
+        try {
+          const sourceTab = await this.getTab(sourceTabId);
+          sourcePinned = !!sourceTab?.pinned;
+        } catch (_) {}
+      }
+
       // Best case: parallel tab exists and is valid
       if (data?.parallelTabId) {
         await this._moveParallelTabToMainWindow(webviewId);
@@ -2563,6 +2554,9 @@
         if (tab?.id) {
           if (active) {
             await this.updateTab(tab.id, { active: true });
+          }
+          if (sourcePinned && !tab.pinned) {
+            await this.updateTab(tab.id, { pinned: true });
           }
           this.logOpenAction("parallel-tab:reused", {
             webviewId,
@@ -2584,6 +2578,9 @@
           reason: "open-action",
         });
         if (adopted?.adopted && adopted?.tab?.id) {
+          if (sourcePinned && !adopted.tab.pinned) {
+            await this.updateTab(adopted.tab.id, { pinned: true });
+          }
           return { tab: adopted.tab, usedAdoption: true };
         }
       }
@@ -2592,7 +2589,7 @@
       this._dispatchFlag("vmod-suppress-tab-toast", "suppress", true);
       let tab;
       try {
-        tab = await this.createTab({ url: currentUrl, active });
+        tab = await this.createTab({ url: currentUrl, active, pinned: sourcePinned });
       } finally {
         this._dispatchFlag("vmod-suppress-tab-toast", "suppress", false);
       }
@@ -4814,102 +4811,39 @@
       const contentEl = panel?.querySelector(".summarize-content");
       if (!contentEl) return;
 
-      const { apiEndpoint, apiKey, model, temperature, maxTokens } = PEEK_AI_CONFIG;
-
-      if (!apiEndpoint || !apiKey) {
-        contentEl.innerHTML = `
-          <div class="summarize-error">
-            <div class="summarize-error-title">AI Not Configured</div>
-            <p>Set your API key in <strong>vivaldi:settings/appearance</strong> &rarr; Mod Config &rarr; AI Config.</p>
-            <p>Mods that need AI: select "Arc Peek" from the AI Mod Config dropdown, or fill in Common AI Config.</p>
-          </div>
-        `;
-        return;
-      }
-
       const systemPrompt = "You are a helpful assistant. Summarize the given web page content concisely and clearly. Use the page's language for the summary. Organize with brief sections if appropriate.";
       const lang = (pageContent.text.match(/[一-鿿]/g) || []).length > pageContent.text.length * 0.15
         ? "Chinese" : "the page's language";
       const userPrompt = `Summarize the following web page in ${lang}. Use markdown formatting for readability.\n\n**Title:** ${pageContent.title}\n**URL:** ${pageContent.url}\n\n**Content:**\n${pageContent.text}`;
 
-      contentEl.innerHTML = "";
+      contentEl.innerHTML = '<div class="summarize-stream"></div>';
 
       try {
-        const response = await fetch(apiEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            temperature,
-            max_tokens: maxTokens,
-            stream: true,
-          }),
+        const { text } = await VividAI.streamChat({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.3,
+          maxTokens: 4096,
           signal: abortController.signal,
+          onDelta: (token) => {
+            const el = contentEl.querySelector(".summarize-stream");
+            if (el) el.textContent += token;
+          },
+          extra: { thinking: { type: "disabled" } },
         });
 
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => "");
-          let detail = `HTTP ${response.status}`;
-          try {
-            const err = JSON.parse(errorText);
-            detail = err.error?.message || err.message || detail;
-          } catch (_) {}
-          contentEl.innerHTML = `<div class="summarize-error">API Error: ${detail}</div>`;
-          return;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let streaming = false;
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data:")) continue;
-            const payload = trimmed.slice(5).trim();
-            if (!payload || payload === "[DONE]") continue;
-
-            try {
-              const parsed = JSON.parse(payload);
-              const token = parsed.choices?.[0]?.delta?.content || "";
-              if (token) {
-                if (!streaming) {
-                  streaming = true;
-                  contentEl.innerHTML = '<div class="summarize-stream"></div>';
-                }
-                contentEl.querySelector(".summarize-stream").textContent += token;
-              }
-            } catch (_) {}
-          }
-        }
-
         // Render collected markdown → HTML + cache
-        const streamEl = contentEl.querySelector(".summarize-stream");
-        const rawText = streamEl ? streamEl.textContent : "";
+        const rawText = text || "";
         if (rawText) {
           const html = this.#renderMarkdown(rawText);
           contentEl.innerHTML = `<div class="summarize-rendered">${html}</div>`;
-          // Cache for this URL
           const currentUrl = this.getPeekUrl(webviewId);
           if (currentUrl) {
             data._summarizeCache = { url: currentUrl, rawText, html };
           }
-        } else if (!streaming) {
+        } else {
           contentEl.innerHTML = '<div class="summarize-stream">(No content returned)</div>';
         }
         data._summarizeAbort = null;
@@ -4920,183 +4854,8 @@
       }
     }
 
-    /**
-     * Minimal markdown → HTML renderer. Handles the most common elements
-     * returned by LLM summarization: headings, bold/italic, code blocks,
-     * inline code, links, unordered/ordered lists, blockquotes, and hr.
-     */
     #renderMarkdown(text) {
-      if (!text) return "";
-
-      const escapeHtml = (s) =>
-        s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-      const renderInline = (s) => {
-        // Order matters: code (protects backticks), then bold, then italic, then links
-        s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
-        s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-        s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>");
-        s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
-          const safe = /^(https?:|\/)/i.test(url) ? url : "#";
-          return `<a href="${safe}" target="_blank" rel="noreferrer">${text}</a>`;
-        });
-        return s;
-      };
-
-      const lines = text.split("\n");
-      const out = [];
-      let inCode = false;
-      let codeBuf = [];
-      let inList = null; // "ul" | "ol" | null
-
-      const closeList = () => {
-        if (inList) {
-          out.push(`</${inList}>`);
-          inList = null;
-        }
-      };
-
-      for (let i = 0; i < lines.length; i++) {
-        const raw = lines[i];
-
-        // Fenced code block
-        if (/^```/.test(raw)) {
-          if (inCode) {
-            out.push(`<pre><code>${escapeHtml(codeBuf.join("\n"))}</code></pre>`);
-            codeBuf = [];
-            inCode = false;
-          } else {
-            closeList();
-            inCode = true;
-          }
-          continue;
-        }
-        if (inCode) {
-          codeBuf.push(raw);
-          continue;
-        }
-
-        // Blank line — skip, but keep lists open.
-        // CommonMark allows blank lines between list items (loose mode).
-        if (!raw.trim()) {
-          continue;
-        }
-
-        // Headings
-        const hMatch = raw.match(/^(#{1,4})\s+(.+)/);
-        if (hMatch) {
-          closeList();
-          const level = hMatch[1].length;
-          out.push(`<h${level}>${renderInline(escapeHtml(hMatch[2]))}</h${level}>`);
-          continue;
-        }
-
-        // HR
-        if (/^[-*_]{3,}\s*$/.test(raw)) {
-          closeList();
-          out.push("<hr>");
-          continue;
-        }
-
-        // Blockquote
-        if (raw.startsWith("> ")) {
-          closeList();
-          out.push(`<blockquote><p>${renderInline(escapeHtml(raw.slice(2)))}</p></blockquote>`);
-          continue;
-        }
-
-        // Unordered list
-        if (/^[-*]\s/.test(raw)) {
-          if (inList !== "ul") { closeList(); out.push("<ul>"); inList = "ul"; }
-          out.push(`<li>${renderInline(escapeHtml(raw.replace(/^[-*]\s/, "")))}</li>`);
-          continue;
-        }
-
-        // Ordered list
-        if (/^\d+\.\s/.test(raw)) {
-          if (inList !== "ol") { closeList(); out.push("<ol>"); inList = "ol"; }
-          out.push(`<li>${renderInline(escapeHtml(raw.replace(/^\d+\.\s/, "")))}</li>`);
-          continue;
-        }
-
-        // Table — current line has |, next line is a separator row
-        if (raw.includes("|") && i + 1 < lines.length) {
-          const nextLine = lines[i + 1];
-          if (/^\|?[\s:-]+\|[\s:-]+\|?/.test(nextLine) && nextLine.includes("-")) {
-            closeList();
-            const tbl = this.#parseTableBlock(lines, i, escapeHtml, renderInline);
-            if (tbl) {
-              out.push(tbl.html);
-              i = tbl.lastIndex;
-              continue;
-            }
-          }
-        }
-
-        // Regular paragraph
-        closeList();
-        out.push(`<p>${renderInline(escapeHtml(raw))}</p>`);
-      }
-
-      closeList();
-      if (inCode) {
-        out.push(`<pre><code>${escapeHtml(codeBuf.join("\n"))}</code></pre>`);
-      }
-
-      return out.join("\n");
-    }
-
-    /**
-     * Parse a markdown table block starting at `startIndex`.
-     * Consumes header + separator + data rows, returns rendered HTML
-     * and the index of the last consumed line.
-     */
-    #parseTableBlock(lines, startIndex, escapeHtml, renderInline) {
-      const parseCells = (line) =>
-        line.split("|")
-          .map((c) => c.trim())
-          .filter((c, idx, arr) => c !== "" || (idx > 0 && idx < arr.length - 1));
-
-      const header = parseCells(lines[startIndex]);
-      const sep = parseCells(lines[startIndex + 1]);
-      if (!header.length || !sep.length) return null;
-
-      // Derive alignments from separator
-      const aligns = sep.map((cell) => {
-        const left = cell.startsWith(":");
-        const right = cell.endsWith(":");
-        if (left && right) return "center";
-        if (right) return "right";
-        return "left";
-      });
-
-      const cellAttrs = (j) => {
-        const a = aligns[j];
-        return a && a !== "left" ? ` style="text-align:${a}"` : "";
-      };
-
-      let html = "<table><thead><tr>";
-      for (let j = 0; j < header.length; j++) {
-        html += `<th${cellAttrs(j)}>${renderInline(escapeHtml(header[j]))}</th>`;
-      }
-      html += "</tr></thead><tbody>";
-
-      let i = startIndex + 2;
-      while (i < lines.length) {
-        const line = lines[i];
-        if (!line.includes("|")) break;
-        const cells = parseCells(line);
-        if (!cells.length) break;
-        html += "<tr>";
-        for (let j = 0; j < Math.min(cells.length, header.length); j++) {
-          html += `<td${cellAttrs(j)}>${renderInline(escapeHtml(cells[j]))}</td>`;
-        }
-        html += "</tr>";
-        i++;
-      }
-
-      html += "</tbody></table>";
-      return { html, lastIndex: i - 1 };
+      return VividMarkdown.render(text);
     }
 
     triggerCopyButtonFeedback(button) {
@@ -5529,11 +5288,11 @@
     }
 
     async holdSnapshotUntilTabReady(overlay, tabId, options = {}) {
-      const { timeoutMs = 9000, minHoldMs = 180 } = options;
+      const { timeoutMs = 5000, minHoldMs = 180 } = options;
       if (!overlay) return;
       const startedAt = Date.now();
       if (tabId) {
-        await this.waitForTabComplete(tabId, timeoutMs);
+        await this.waitForTabReady(tabId, timeoutMs);
       } else {
         await new Promise((resolve) => window.setTimeout(resolve, minHoldMs));
       }
@@ -5692,6 +5451,16 @@
           await this._moveParallelTabToMainWindow(webviewId);
           const tab = await this.resolveParallelTab(webviewId);
           if (tab?.id) {
+            // Sync pinned state from source tab.
+            const sourceTabId = this.getOwningTabId(data);
+            if (sourceTabId) {
+              try {
+                const sourceTab = await this.getTab(sourceTabId);
+                if (sourceTab?.pinned && !tab.pinned) {
+                  await this.updateTab(tab.id, { pinned: true });
+                }
+              } catch (_) {}
+            }
             const panelRect = data.divContainer
               ?.querySelector(".peek-panel")
               ?.getBoundingClientRect?.();
@@ -5779,32 +5548,24 @@
         tabId: sourceTabId,
       });
 
-      // Close the source tab and switch to the pre-loaded parallel tab.
-      const result = await this.ensureParallelTab(webviewId, { active: true });
-      const usedTabId = result?.tab?.id || null;
-
-      if (usedTabId) {
-        try { await this.removeTab(sourceTabId); } catch (_) {}
-      } else {
-        // Fallback: no parallel tab available, just update the source tab's URL
-        await this.updateTab(sourceTabId, { url, active: true });
-      }
+      // Navigate the source tab to the peek URL, preserving pinned state.
+      const sourceTab = await this.getTab(sourceTabId);
+      await this.updateTab(sourceTabId, { url, active: true, pinned: !!sourceTab?.pinned });
 
       this.logOpenAction("open-action:source-tab:done", {
         webviewId,
         sourceTabId,
-        usedTabId,
-        usedParallel: !!result?.usedParallel,
+        usedTabId: sourceTabId,
+        usedParallel: false,
         error: chrome.runtime.lastError?.message || "",
       });
 
       await this.disposePeek(webviewId, {
         animated: false,
         closeRuntimeTab: true,
-        closeParallelTab: false,
+        closeParallelTab: true,
       });
-      const targetTabId = usedTabId || sourceTabId;
-      void this.holdSnapshotUntilTabReady(overlay, targetTabId);
+      void this.holdSnapshotUntilTabReady(overlay, sourceTabId);
     }
 
     isArcPeekSplitTab(tab, ownerTabId = null) {

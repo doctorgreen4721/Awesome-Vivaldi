@@ -1,255 +1,175 @@
-<div align="center">
-    <img width="200" height="200" src="./Others/assets/IMG5682.png">
-    <h1>Awesome Vivaldi</h1>
-</div>
+<p align="center">
+  <img src="./Others/assets/hero.svg" width="100%" alt="Volante — Mods that turn Vivaldi Browser into Arc">
+</p>
 
 <div align="center">
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/PaRr0tBoY/Awesome-Vivaldi)
 [![Vivaldi Forum](https://img.shields.io/badge/Vivaldi-Forum-red)](https://forum.vivaldi.net/topic/112064/modpack-community-essentials-mods-collection?_=1761221602450)
+[![LINUX DO](https://img.shields.io/badge/LINUX-DO-1c1c1e?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48c3ZnIHZlcnNpb249IjEuMiIgYmFzZVByb2ZpbGU9InRpbnktcHMiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiB2aWV3Qm94PSIwIDAgMTIwIDEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU%2BTElOVVggRE8gTG9nbzwvdGl0bGU%2BPGNsaXBQYXRoIGlkPSJhIj48Y2lyY2xlIGN4PSI2MCIgY3k9IjYwIiByPSI0NyIvPjwvY2xpcFBhdGg%2BPGNpcmNsZSBmaWxsPSIjZjBmMGYwIiBjeD0iNjAiIGN5PSI2MCIgcj0iNTAiLz48cmVjdCBmaWxsPSIjMWMxYzFlIiBjbGlwLXBhdGg9InVybCgjYSkiIHg9IjEwIiB5PSIxMCIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIzMCIvPjxyZWN0IGZpbGw9IiNmMGYwZjAiIGNsaXAtcGF0aD0idXJsKCNhKSIgeD0iMTAiIHk9IjQwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjQwIi8%2BPHJlY3QgZmlsbD0iI2ZmYjAwMyIgY2xpcC1wYXRoPSJ1cmwoI2EpIiB4PSIxMCIgeT0iODAiIHdpZHRoPSIxMDAiIGhlaWdodD0iMzAiLz48L3N2Zz4%3D "Proudly from LINUX DO")](https://linux.do)
+[![Awesome](https://awesome.re/badge.svg)](https://awesome.re)
 ![GitHub Repo stars](https://img.shields.io/github/stars/PaRr0tBoY/Awesome-Vivaldi)
-
-</div>
-
-<div align="center">
-    <p>A Curated Community Mod Pack for Vivaldi Browser</p>
-</div>
-
-<div align="center">
 
 **English** | [简体中文](./Doc/READMEZH/READMEMAIN.md)
 
 </div>
 
-<!-- <img src="" width="32%" alt="home" />
-<img src="" width="32%" alt="home" />
-<img src="" width="32%" alt="home" />
-<br/>
-<img src="" width="96%" alt="home" />
-<br/> -->
+---
 
-<br/>
+## Quick Start
 
-## Table of Contents
+Works with [Vivaldi 8.0+](./Vivaldi8.0Stable). Check your version at `vivaldi:about`.
 
-- [Introduction](#introduction)
-- [***Installation](#installation)
-- [Latest Updates](#latest-updates)
-- [Feature Showcase](#feature-showcase)
-- [Vivaldi Max (AI Features)](#vivaldi-maxai-features)
-- [Mod List](#mod-list)
-- [Community Mods](#community-mods)
-- [Documentation](#documentation)
+**Windows** (PowerShell):
 
-## Introduction
-
-This modpack is always updated with Vivaldi, [Vivaldi 8 latest](./Vivaldi8.0Stable) is currently supported.
-
-> Which version of Vivaldi browser are you using? If you're not sure, check it out at `vivaldi:about`.
-
-## Installation
-
-1. One command installation scripts (***experimental***)
-
-Windows (PowerShell)
 ```powershell
-
 irm https://raw.githubusercontent.com/PaRr0tBoY/Awesome-Vivaldi/main/install.ps1 | iex
 ```
 
-macOS (bash)
+**macOS** (bash):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PaRr0tBoY/Awesome-Vivaldi/main/install.sh | bash
 ```
 
-To Uninstall, run the scripts again.
+**Linux** (bash):
 
-<img width="919" height="469" alt="image" src="https://github.com/user-attachments/assets/2084ca97-4712-4c12-b3f8-ad79ba124cfb" />
-
-2. Or If you have agents like claude code on your pc, ask it to:
-
-```
-Install https://github.com/PaRr0tBoY/Awesome-Vivaldi for me.
+```bash
+curl -fsSL https://raw.githubusercontent.com/PaRr0tBoY/Awesome-Vivaldi/main/install.sh | sudo bash
 ```
 
-3. Or [Click me](./Vivaldi8.0Stable/README.md) to navigate to the Manual Installation Guide.
+To uninstall, run the same script again.
 
-## Latest Updates
+> Prefer manual setup? See the **[Installation Guide](./Vivaldi8.0Stable/README.md)**.
+> Have a coding agent? Ask it: `Install https://github.com/PaRr0tBoY/Awesome-Vivaldi for me.`
 
-| Showcase                                                    | Mods                                   |
-| ----------------------------------------------------------- | -------------------------------------- |
-| ![VividToast](./Others/assets/toast.gif)                    | `VividToast.css` + `VividToast.js` |
-| ![VividPeek](./Others/assets/VividPeekUpdate.gif)           | `VividPeek.js`                       |
-| ![Restore Pinned Tab](./Others/assets/restorepinnedtab.gif) | `restorepinnedtab.js`                |
+<p align="center">
+  <img width="800" alt="Installer preview" src="https://github.com/user-attachments/assets/2084ca97-4712-4c12-b3f8-ad79ba124cfb" />
+</p>
 
-## Feature Showcase
+---
 
-| Showcase                                            | Mods                                     |
-| --------------------------------------------------- | ---------------------------------------- |
-| ![VividPeek](./Others/assets/ArcPeek.gif)           | `VividPeek.css` + `VividPeek.js`     |
-| ![VividPlayer](./Others/assets/VividPlayer.gif)     | `VividPlayer.css` + `VividPlayer.js` |
-| ![FavouriteTabs](./Others/assets/FavouriteTabs.gif) | `FavouriteTabs.css`                    |
-| ![PeekTabbar](./Others/assets/PeekTabbar.gif)       | `PeekTabbar.css`                       |
-| ![Quietify](./Others/assets/Quietify.gif)           | `Quietify.css`                         |
+<p align="center">
+  <img src="./Others/assets/section-showcase.svg" width="100%" alt="Feature Showcase">
+</p>
 
-## Vivaldi Max(AI Features)
+| Feature                                         | Mod Files                            | What it does                                                                                 |
+|:----------------------------------------------- |:------------------------------------ |:-------------------------------------------------------------------------------------------- |
+| ![VividPeek](./Others/assets/ArcPeek.gif)       | `VividPeek.css` + `VividPeek.js`     | Arc-style peek dialog — preview tabs in a floating overlay without leaving your current page |
+| ![VividPlayer](./Others/assets/VividPlayer.gif) | `VividPlayer.css` + `VividPlayer.js` | Media player popover with progress bar, artwork, and playback controls                       |
+| ![PeekTabbar](./Others/assets/PeekTabbar.gif)   | `PeekTabbar.css`                     | Auto-hide tabbar that expands on hover, with two-level stacking                              |
 
-| Showcase                                            | Mods                                                   |
-| --------------------------------------------------- | ------------------------------------------------------ |
-| ![TidyTabs](./Others/assets/VivaldiMax.gif)         | `TidyTabs.css` + `TidyTabs.js` + `TidyTitles.js` |
-| ![TidyDownloads](./Others/assets/TidyDownloads.gif) | `TidyDownloads.js`                                   |
-| ![TidyAddress](./Others/assets/tidyaddress.gif)     | `TidyAddress.js`                                     |
-| ![AskOnPage](./Others/assets/AskInPage.png)         | `AskOnPage.js`                                       |
+---
+
+<p align="center">
+  <img src="./Others/assets/section-max.svg" width="100%" alt="Vivaldi MAX AI Features">
+</p>
+
+Requires an [OpenAI-compatible API key](https://github.com/cheahjs/free-llm-api-resources?tab=readme-ov-file#opencode-zen). Configure in `vivaldi:settings/appearance/` → Volante settings.
+
+| Feature                                             | Mod Files                        | What it does                                                       |
+|:--------------------------------------------------- |:-------------------------------- |:------------------------------------------------------------------ |
+| ![TidyTabs](./Others/assets/VivaldiMax.gif)         | `TidyTabs.js` + `TidyTitles.js`  | AI-powered tab grouping and title cleanup                          |
+| ![TidyDownloads](./Others/assets/TidyDownloads.gif) | `TidyDownloads.js`               | Rename messy download filenames into readable names                |
+| ![TidyAddress](./Others/assets/tidyaddress.gif)     | `TidyAddress.js`                 | Rewrite URL suffixes into human-readable slugs                     |
+| ![AskOnPage](./Others/assets/AskInPage.png)         | `AskOnPage.js` + `AskOnPage.css` | Ctrl+F AI page search — find or ask anything with inline citations |
+
+---
 
 ## Mod List
 
-&nbsp;
+### CSS Mods
 
-### CSS
+| File                      | Description                                             |
+|:------------------------- |:------------------------------------------------------- |
+| `VividToast.css`          | Toast notification theming                              |
+| `VividPeek.css`           | Arc peek overlay styling*(requires `VividPeek.js`)*     |
+| `PeekTabbar.css`          | Auto-hide tabbar with two-level stacking on hover       |
+| `VividPlayer.css`         | Media player popover styling                            |
+| `VividQC.css`             | Arc-like quick command styling                          |
+| `TidyTabs.css`            | AI tab grouping visual output*(requires `TidyTabs.js`)* |
+| `AskOnPage.css`           | Floating AI find bar styling                            |
+| `Quietify.css`            | Sleeker audio indicator                                 |
+| `TabsTrail.css`           | Green trail on active/hovered tabs                      |
+| `AdaptiveBF.css`          | Hide back/forward buttons when unnecessary              |
+| `BetterAnimation.css`     | Smoother overscroll animation                           |
+| `RemoveClutter.css`       | Hide scrollbars and visual clutter                      |
+| `PinnedTabRestore.css`    | Restore pinned tab state on restart                     |
+| `InteractionFeedback.css` | Hover and click micro-interactions                      |
+| `DownloadPanel.css`       | Download panel theming                                  |
+| `Extensions.css`          | Extensions dropdown as list                             |
+| `FavouriteTabs.css`       | Arc-like favourite tabs grid*(first 9 pinned tabs)*     |
+| `BtnHoverAnime.css`       | Button hover animation*(disabled by default)*           |
 
-| File                  | Description                                                 |
-| --------------------- | ----------------------------------------------------------- |
-| `AdaptiveBF.css`      | Hide back/forward buttons when unnecessary                  |
-| `VividPeek.css`       | Arc peek experience (pair with `VividPeek.js`)              |
-| `BetterAnimation.css` | Smoother overscroll animation                               |
-| `BtnHoverAnime.css`   | Button hover animation *(disabled by default)*              |
-| `DownloadPanel.css`   | Download panel theming                                      |
-| `Extensions.css`      | Extensions dropdown as list, overflow handling              |
-| `FavouriteTabs.css`   | Arc-like favorite tabs grid (first 9 pinned tabs)           |
-| `AskOnPage.css`      | Ask on Page styling — floating AI find bar              |
-| `VividQC.css`         | Arc-like quick command styling                              |
-| `LineBreak.css`       | Utility / omit it                                           |
-| `PeekTabbar.css`      | Peek tabbar on hover with 2-level stacking                  |
-| `Quietify.css`        | Sleeker audio indicator                                     |
-| `RemoveClutter.css`   | Hide scrollbars & visual clutter                            |
-| `TabsTrail.css`       | Green trail on active/hovered tabs                          |
-| `TidyTabs.css`        | AI tab grouping *(requires* `TidyTabs.js`*)*                    |
-| `VivalArc.css`        | Arc theme port *(incompatible with this modpack)*           |
+### JavaScript Mods
 
-### Javascripts
-
-| File                     | Description                                                     |
-| ------------------------ | --------------------------------------------------------------- |
-| `VividPeek.js`           | [Arc peek dialog support](./Doc/mod/VividPeek.md) *(pairs with* `VividPeek.css`*)* |
-| `AskOnPage.js`           | Ctrl+F AI page search — find or ask anything, inline citations |
-| `Diabar.js`              | AI sidebar chat — page Q&A, summaries, rewrites |
-| `AutoHidePanel.js`       | [Auto-hide side panel](./Doc/mod/AutoHidePanel.md) |
-| `EasyFiles.js`           | [Opera-inspired file attachment via clipboard &amp; downloads](./Doc/mod/EasyFiles.md) |
-| `ModConfig.js`           | [Shared settings panel for AI keys and supported mods](./Doc/mod/ModConfig.md) |
-| `MonochromeIcons.js`     | [Monochrome web panel icons to reduce visual noise](./Doc/mod/MonochromeIcons.md) |
-| `QuickCapture.js`        | [Auto-select capture area with clipboard/file/default modes](./Doc/mod/QuickCapture.md) |
-| `TidyDownloads.js`       | [AI download filename cleanup](./Doc/mod/TidyDownloads.md) |
-| `TidyTabs.js`            | [AI tab grouping](./Doc/mod/TidyTabs.md) *(pairs with* `TidyTabs.css`*)* |
-| `TidyTitles.js`          | [AI tab title cleanup](./Doc/mod/TidyTitles.md) |
-| `TabManager.js`          | [Workspace Board panel for viewing and managing workspace tabs](./Doc/mod/TabManager.md) |
-| `TidyAddress.js`         | [Rewrites the visible URL suffix into an AI-generated slug](./Doc/mod/TidyAddress.md) |
-| `VividToast.js`          | [Toast notification logic](./Doc/mod/VividToast.md) *(pairs with* `VividToast.css`*)* |
-
-
-<details>
-<summary><h2>Community Mods</h2></summary>
-
-### Community JS Mods And CSS Included In This Modpack
-
-[📸 Element Capture](https://forum.vivaldi.net/topic/103686/element-capture?_=1758777284963)
-
-> This mod adds the function of automatically selecting the area to capture when taking screenshots.
-
-[Colorful tabs](https://forum.vivaldi.net/topic/96586/colorful-tabs?_=1758775816485)
-
-> Part of the code that calculates the color from an icon
-
-[Monochrome icons](https://forum.vivaldi.net/topic/102661/monochrome-icons?_=1758775889576)
-
-> This modification changes the hue of all web panel icons and makes them monochrome. The panel becomes overtly busy and the colors are all over the place with web panels, therefore it makes sense toning them down somewhat and letting them blend in more.
-
-[Import Export Command Chains](https://forum.vivaldi.net/topic/93964/import-export-command-chains?page=1)
-
-> This mods helps import and export command chains for Vivaldi.
-> This mod comes with the ability to directly install code exported through the code block (```) of the Vivaldi forum.
-
-[📂 Easy Files](https://forum.vivaldi.net/topic/94531/easy-files?page=1)
-
-> This mod is inspired by opera. It makes attaching files easier by displaying files in the clipboard and downloaded files.
-
-[Click to add Blocking list](https://forum.vivaldi.net/topic/45735/click-to-add-blocking-list)
-
-> This mod add support for adding the block list by clicking on the link in sites like other adblock.
-
-[Global Media Controls Panel](https://forum.vivaldi.net/topic/66803/global-media-controls-panel)
-
-> This mod will add a Global Media Controls in vivaldi's panel similar to Global Media Controls in chrome
-
-[Markdown Editor for Notes](https://forum.vivaldi.net/topic/35644/markdown-editor-for-notes)
-
-> Simple Markdown Editor for Notes Editor
-
-[Open panels on mouse-over.](https://forum.vivaldi.net/topic/28413/open-panels-on-mouse-over/22?_=1593504963587)
-
-> Auto-close when you mouse over to body
-> Don't open if mouse exits screen before timeout period
-> Unique delays based on situation
-
-[Dashboard Camo: Theme Integration for Dashboard Webpages](https://forum.vivaldi.net/topic/102173/dashboard-camo-theme-integration-for-dashboard-webpages/3)
-
-> It takes all the custom CSS properties which Vivaldi sets according to your theme and passes them to all webpage widgets, where you can use them for styling your custom widgets.
-
-[Colorful Top Loading Bar](https://forum.vivaldi.net/topic/111621/colorful-top-loading-bar?_=1758776810153)
-
-> A JS and CSS that make Vivaldi's Title bar visually appealing when a webpage is loading.
-
-[Feed icons](https://forum.vivaldi.net/topic/73001/feed-icons?_=1758776884927)
-
-> This is a small mod that converts feed icons into website icons.
-
-[Address Bar like in Yandex Browser](https://forum.vivaldi.net/topic/96072/address-bar-like-in-yandex-browser?_=1758776929535)
-
-> Make address bar displays the title of the current page and the domain, clicking on which leads to the homepage of the website.
-
-[Open in Dialog mod](https://forum.vivaldi.net/topic/92501/open-in-dialog-mod/95?_=1758776959371)
-
-> A mod to open links or a search in a dialog popup.
-
-[Auto expand and collapse tabbar for two-level tab stack: Rework](https://forum.vivaldi.net/topic/111893/auto-expand-and-collapse-tabbar-for-two-level-tab-stack-rework?_=1758777265037)
-
-> Auto expand and collapse tabbar
-
-[Auto expand and collapse tabbar for two-level tab stack: Rework](https://forum.vivaldi.net/topic/111893/auto-expand-and-collapse-tabbar-for-two-level-tab-stack-rework?_=1758777265037)
-
-> Auto expand and collapse tabbar
-
-[Theme Previews Plus | Vivaldi Forum](https://forum.vivaldi.net/topic/103422/theme-previews-plus?_=1759122196203)
-
-> To make theme preview properly reflect the actual placement of your tab bar, address bar, and panel bar, as well as show floating tabs when those are enabled.
->
-> NOTE: This mod only works when the settings page is opened in a tab ("Open Settings in a Tab" is enabled in vivaldi://settings/appearance/).
-
-[tovifun/VivalArc: With just a few tweaks, you can give Vivaldi that cool Arc vibe](https://github.com/tovifun/VivalArc)
-
-> Part of codes in this repo is used.
-
-</details>
+| File                 | Description                                                                |
+|:-------------------- |:-------------------------------------------------------------------------- |
+| `VividPeek.js`       | [Arc peek dialog](./Doc/mod/VividPeek.md) — preview tabs without switching |
+| `AskOnPage.js`       | Ctrl+F AI page search with inline citations                                |
+| `Diabar.js`          | [AI sidebar chat](./Doc/mod/Diabar.md) — page Q&A, summaries, rewrites     |
+| `TidyTabs.js`        | [AI tab grouping](./Doc/mod/TidyTabs.md)                                   |
+| `TidyTitles.js`      | [AI tab title cleanup](./Doc/mod/TidyTitles.md)                            |
+| `TidyDownloads.js`   | [AI download filename cleanup](./Doc/mod/TidyDownloads.md)                 |
+| `TidyAddress.js`     | [URL suffix → readable slug](./Doc/mod/TidyAddress.md)                     |
+| `ModConfig.js`       | [Shared settings panel](./Doc/mod/ModConfig.md) for AI keys and mod config |
+| `VividToast.js`      | [Toast notification logic](./Doc/mod/VividToast.md)                        |
+| `QuickCapture.js`    | [Auto-select capture area](./Doc/mod/QuickCapture.md)                      |
+| `MonochromeIcons.js` | [Monochrome web panel icons](./Doc/mod/MonochromeIcons.md)                 |
+| `EasyFiles.js`       | [Opera-inspired file attachment](./Doc/mod/EasyFiles.md)                   |
+| `TabManager.js`      | [Workspace board panel](./Doc/mod/TabManager.md)                           |
+| `AutoHidePanel.js`   | [Auto-hide side panel](./Doc/mod/AutoHidePanel.md)                         |
 
 ---
 
 ## Documentation
 
-Browse the full documentation portal at **[Doc](https://parr0tboy.github.io/docs/)** — design philosophy, mod architecture deep-dives, API references, and reverse-engineered Vivaldi internals.
-
----
-## Tip of the Day
-
-```
-1. Navigate to vivaldi://vivaldi-urls/, toggle on Enable internal debugging pages.
-2. Next, go to vivaldi:settings/qc/ and create a new Quick Command with the following content:
-3. Open Link in Current Tab with the url:chrome://restart
-4. After that, customize toolbar and add this restart button
-5. You can now restart Vivaldi with one click. If you’re a modder, this comes in handy whenever you need to reload to make your mods take effect.
-6. You can also modify the icon of the toolbar button at vivaldi:settings/themes/
-```
-
-<img width="800" height="160" alt="image" src="https://github.com/user-attachments/assets/cca14862-42c6-4f30-a63d-d0af6ec16756" />
+Browse the full docs at **[parr0tboy.github.io/docs](https://parr0tboy.github.io/docs/)** — design philosophy, mod architecture deep-dives, API references, and reverse-engineered Vivaldi internals.
 
 ---
 
-![Alt](https://repobeats.axiom.co/api/embed/4a30f8a4b398404c3c773f672d36c2b52f7865c3.svg "Repobeats analytics image")
+<details>
+<summary><h2>Community Mods</h2></summary>
+
+These mods come from the [Vivaldi Forum](https://forum.vivaldi.net/) and are included in the pack:
+
+| Mod                          | Source                                                                                                                                       |
+|:---------------------------- |:-------------------------------------------------------------------------------------------------------------------------------------------- |
+| Element Capture              | [Forum](https://forum.vivaldi.net/topic/103686/element-capture) — auto-select capture area for screenshots                                   |
+| Colorful Tabs                | [Forum](https://forum.vivaldi.net/topic/96586/colorful-tabs) — icon-derived tab coloring                                                     |
+| Monochrome Icons             | [Forum](https://forum.vivaldi.net/topic/102661/monochrome-icons) — tone down web panel icons                                                 |
+| Easy Files                   | [Forum](https://forum.vivaldi.net/topic/94531/easy-files) — clipboard + downloads file picker                                                |
+| Command Chains Import/Export | [Forum](https://forum.vivaldi.net/topic/93964/import-export-command-chains) — import/export command chains                                   |
+| Click to Add Blocking List   | [Forum](https://forum.vivaldi.net/topic/45735/click-to-add-blocking-list) — one-click adblock list install                                   |
+| Global Media Controls        | [Forum](https://forum.vivaldi.net/topic/66803/global-media-controls-panel) — Chrome-style media panel                                        |
+| Markdown Editor for Notes    | [Forum](https://forum.vivaldi.net/topic/35644/markdown-editor-for-notes) — markdown editing in notes                                         |
+| Open Panels on Mouse-Over    | [Forum](https://forum.vivaldi.net/topic/28413/open-panels-on-mouse-over) — auto-open/close panels on hover                                   |
+| Dashboard Camo               | [Forum](https://forum.vivaldi.net/topic/102173/dashboard-camo-theme-integration-for-dashboard-webpages) — theme-aware widget styling         |
+| Colorful Top Loading Bar     | [Forum](https://forum.vivaldi.net/topic/111621/colorful-top-loading-bar) — animated title bar on page load                                   |
+| Feed Icons                   | [Forum](https://forum.vivaldi.net/topic/73001/feed-icons) — convert feed icons to favicons                                                   |
+| Address Bar (Yandex-style)   | [Forum](https://forum.vivaldi.net/topic/96072/address-bar-like-in-yandex-browser) — title + domain display                                   |
+| Open in Dialog               | [Forum](https://forum.vivaldi.net/topic/92501/open-in-dialog-mod) — open links in popup dialogs                                              |
+| Tab Stack Auto-Expand        | [Forum](https://forum.vivaldi.net/topic/111893/auto-expand-and-collapse-tabbar-for-two-level-tab-stack-rework) — auto expand/collapse tabbar |
+| Theme Previews Plus          | [Forum](https://forum.vivaldi.net/topic/103422/theme-previews-plus) — accurate theme preview in settings                                     |
+| VivalArc                     | [GitHub](https://github.com/tovifun/VivalArc) — Arc theme port                                                                               |
+
+</details>
+
+---
+
+## Tip
+
+<details>
+<summary>Create a one-click restart button (useful for mod development)</summary>
+
+1. Go to `vivaldi://vivaldi-urls/` → enable **internal debugging pages**
+2. Create a Quick Command at `vivaldi:settings/qc/`: **Open Link in Current Tab** → `chrome://restart`
+3. Add it to the toolbar via **customize toolbar**
+4. Optionally change the icon at `vivaldi:settings/themes/`
+
+</details>
+
+---
+
+Special thanks to the [LINUX DO](https://linux.do) community for the support.
+![Repo activity](https://repobeats.axiom.co/api/embed/4a30f8a4b398404c3c773f672d36c2b52f7865c3.svg "Repobeats analytics")

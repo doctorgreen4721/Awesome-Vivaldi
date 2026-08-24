@@ -16,13 +16,13 @@
 ### 外部依赖
 
 - **MutationObserver**: 监听 `#browser` DOM 变化、`#urlFieldInput` 属性变化、`<title>` 元素变化
-- **fetch API**: 调用 AI Chat Completions 接口
+- **VividAI.js** -- 共享 AI 配置与 API 调用模块（替代本地 AI_CONFIG）
 - **localStorage**: 缓存已生成的 slug (key: `vivid-address-cache-v1`, 上限 600 条)
 - **navigator.storage.getDirectory()**: 读取 ModConfig 共享配置
 
 ### 模组间依赖
 
-- **AskInPage / ModConfig AI 系统**: 通过 `vivaldi-mod-ai-config-updated` 事件读取 `.askonpage/config.json` 中的 `ai.tidyAddress` 配置
+- **VividAI.js** -- 共享 AI 配置；已关闭思考模式
 
 ## 2. 功能
 

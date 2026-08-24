@@ -20,7 +20,7 @@
   const IMPORT_CSS = "Import.css";
   const CSS_DIR = "user_mods/css/";
   const JS_DIR = "user_mods/js/";
-  const PRIORITY_JS = ["ModConfig.js"];
+  const PRIORITY_JS = ["ModConfig.js", "VividAI.js", "VividMarkdown.js"];
 
   const LOG_PREFIX = "[AwesomeVivaldi]";
 
@@ -134,6 +134,59 @@
     }
   }
 
+  // ── Seed config ─────────────────────────────────────────────────
+
+  function readSeedConfig() {
+    return new Promise(function (resolve) {
+      if (!chrome.runtime || !chrome.runtime.getPackageDirectoryEntry) {
+        resolve(null);
+        return;
+      }
+
+      chrome.runtime.getPackageDirectoryEntry(function (rootDir) {
+        rootDir.getDirectory(
+          "user_mods",
+          { create: false },
+          function (modsDir) {
+            modsDir.getFile(
+              "modconfig-seed.json",
+              { create: false },
+              function (fileEntry) {
+                fileEntry.file(function (file) {
+                  var reader = new FileReader();
+                  reader.onload = function () {
+                    try {
+                      var data = JSON.parse(reader.result);
+                      if (data && data.ai && data.ai.providers) {
+                        resolve(data);
+                      } else {
+                        resolve(null);
+                      }
+                    } catch (_) {
+                      resolve(null);
+                    }
+                  };
+                  reader.onerror = function () {
+                    resolve(null);
+                  };
+                  reader.readAsText(file);
+                }, function () {
+                  resolve(null);
+                });
+              },
+              function () {
+                resolve(null);
+              }
+            );
+          },
+          function () {
+            resolve(null);
+          }
+        );
+      });
+    });
+  }
+
   // ── Init ─────────────────────────────────────────────────────────
 
   function init() {
@@ -142,8 +195,16 @@
     // CSS is non-blocking — browser loads Import.css in parallel
     loadCSS();
 
-    // JS loads sequentially via async=false to respect dependency order
-    listJSFiles().then(function (files) {
+    // Read seed config first (ModConfig.js needs it as a global before loading)
+    readSeedConfig().then(function (seedData) {
+      if (seedData) {
+        window.__vivmod_seed_config = seedData;
+        log("Seed config found — ModConfig.js will initialize from it");
+      }
+
+      // JS loads sequentially via async=false to respect dependency order
+      return listJSFiles();
+    }).then(function (files) {
       if (files.length > 0) {
         loadAllJS(files);
       } else {

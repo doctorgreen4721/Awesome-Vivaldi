@@ -52,8 +52,9 @@ Ctrl+F → 通用查询栏
 | 模组 | 关系 |
 |-----|------|
 | `ModConfig.js` | 共享 AI 配置（`askOnPage` key），支持独立覆盖 |
-| `VividPeek.js` | Ctrl+F 共存 — Peek 活跃时不拦截 |
-
+| `VividPeek.js` | Ctrl+F 共存 -- Peek 活跃时不拦截 |
+| `VividAI.js` | 共享 AI 配置与 SSE 流式调用；已关闭思考模式 |
+| `VividMarkdown.js` | 共享 Markdown 渲染器（带引用标注钩子） |
 ---
 
 ## 3. 架构

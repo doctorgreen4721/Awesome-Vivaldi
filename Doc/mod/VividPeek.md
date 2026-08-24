@@ -34,6 +34,8 @@ This document is based on [VividPeek.js](/Vivaldi7.9Stable/Javascripts/VividPeek
 ### Inter-Mod Dependencies
 
 - CSS file: `ArcPeek.css` provides all styles for the Peek container, panel, sidebar buttons, Nebula loading effect, etc.
+- **VividAI.js** -- Shared AI configuration; thinking disabled
+- **VividMarkdown.js** -- Shared Markdown-to-HTML renderer for summarize content
 
 ## 2. Features
 

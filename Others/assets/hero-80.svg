@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="260" viewBox="0 0 1200 260"
+     role="img" aria-labelledby="v80-title v80-desc">
+  <title id="v80-title">Volante — Vivaldi 8.0 Stable</title>
+  <desc id="v80-desc">Manual installation guide for Vivaldi 8.0 Stable.</desc>
+
+  <!-- Background -->
+  <rect width="1200" height="260" fill="#1a1f1a"/>
+
+  <!-- Top accent bar -->
+  <rect x="0" y="0" width="1200" height="3" fill="#3e4b3f"/>
+
+  <!-- Subtle grid -->
+  <g opacity="0.08" stroke="#2f362f" stroke-width="0.5">
+    <line x1="0" y1="65" x2="1200" y2="65"/>
+    <line x1="0" y1="130" x2="1200" y2="130"/>
+    <line x1="0" y1="195" x2="1200" y2="195"/>
+    <line x1="300" y1="0" x2="300" y2="260"/>
+    <line x1="600" y1="0" x2="600" y2="260"/>
+    <line x1="900" y1="0" x2="900" y2="260"/>
+  </g>
+
+  <!-- Title block -->
+  <g transform="translate(64, 38)">
+    <!-- Category -->
+    <text x="0" y="0" fill="#6b7260" font-family="Georgia, 'Palatino Linotype', serif" font-size="12" letter-spacing="2.5">VIVALDI 8.0 STABLE</text>
+
+    <!-- Accent line -->
+    <rect x="0" y="12" width="48" height="2" rx="1" fill="#3e4b3f"/>
+
+    <!-- Project name -->
+    <text x="0" y="64" fill="#d8ded8" font-family="Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif" font-size="52" font-weight="400" font-style="italic" letter-spacing="-0.5">Volante</text>
+
+    <!-- Subtitle -->
+    <text x="0" y="102" fill="#8a908a" font-family="Georgia, 'Palatino Linotype', serif" font-size="16" font-weight="400">Manual installation guide, developer docs, and CSS variable reference.</text>
+
+    <!-- Tags -->
+    <g transform="translate(0, 128)">
+      <rect x="0" y="0" width="80" height="24" rx="12" fill="none" stroke="#2f362f" stroke-width="0.5"/>
+      <text x="40" y="16" text-anchor="middle" fill="#6b7260" font-family="Georgia, 'Palatino Linotype', serif" font-size="9.5">v8.0.0</text>
+      <rect x="90" y="0" width="100" height="24" rx="12" fill="none" stroke="#2f362f" stroke-width="0.5"/>
+      <text x="140" y="16" text-anchor="middle" fill="#6b7260" font-family="Georgia, 'Palatino Linotype', serif" font-size="9.5">CSS + JS mods</text>
+      <rect x="200" y="0" width="110" height="24" rx="12" fill="none" stroke="#2f362f" stroke-width="0.5"/>
+      <text x="255" y="16" text-anchor="middle" fill="#6b7260" font-family="Georgia, 'Palatino Linotype', serif" font-size="9.5">Settings panel</text>
+    </g>
+  </g>
+
+  <!-- Right side: file structure -->
+  <g transform="translate(720, 34)">
+    <!-- File tree background -->
+    <rect x="0" y="0" width="400" height="192" rx="10" fill="#1e241e" stroke="#2f362f" stroke-width="1"/>
+
+    <!-- Title bar -->
+    <rect x="0" y="0" width="400" height="26" rx="10" fill="#222822"/>
+    <rect x="0" y="14" width="400" height="12" fill="#222822"/>
+    <circle cx="14" cy="13" r="3.5" fill="#b56357" opacity="0.7"/>
+    <circle cx="28" cy="13" r="3.5" fill="#c4955e" opacity="0.7"/>
+    <circle cx="42" cy="13" r="3.5" fill="#546b56" opacity="0.7"/>
+
+    <!-- Tree content -->
+    <g transform="translate(16, 40)">
+      <!-- Folder -->
+      <text x="0" y="0" fill="#d8ded8" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace" font-size="11.5" font-weight="600">Vivaldi8.0Stable/</text>
+
+      <!-- Import.css -->
+      <text x="16" y="22" fill="#d8ded8" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace" font-size="11">Import.css</text>
+
+      <!-- CSS folder -->
+      <text x="16" y="46" fill="#546b56" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace" font-size="11" font-weight="600">CSS/</text>
+      <text x="32" y="66" fill="#8a908a" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace" font-size="10">VividPeek.css · VividToast.css</text>
+      <text x="32" y="82" fill="#8a908a" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace" font-size="10">Quietify.css · PeekTabbar.css …</text>
+
+      <!-- Javascripts folder -->
+      <text x="16" y="108" fill="#546b56" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace" font-size="11" font-weight="600">Javascripts/</text>
+      <text x="32" y="128" fill="#8a908a" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace" font-size="10">VividPeek.js · TidyTabs.js</text>
+      <text x="32" y="144" fill="#8a908a" font-family="ui-monospace, 'SFMono-Regular', Menlo, monospace" font-size="10">ModConfig.js · Diabar.js …</text>
+    </g>
+  </g>
+</svg>

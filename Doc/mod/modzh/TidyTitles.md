@@ -17,13 +17,14 @@
 
 ### 外部依赖
 
-- **OpenAI 兼容 Chat Completions API** -- 通过 `fetch` 调用，支持 GLM / Mimo / OpenRouter / DeepSeek 等端点
+- **VividAI.js** -- 共享 AI 配置与 API 调用模块
 - **浏览器原生 API**: `navigator.storage.getDirectory()` (OPFS), `chrome.i18n.getUILanguage()`
 
 ### 模组间依赖
 
 - **VividToast** (`window.VividToast.show`) -- Toast 通知系统
 - **TidyTabs** -- TidyTitles 读取 `vivExtData.tidyStackOwner === "TidyTabs"` 来识别由 TidyTabs 管理的标签栈，避免重复重命名
+- **VividAI.js** -- 共享 AI 配置；已关闭思考模式
 
 ## 2. 功能
 

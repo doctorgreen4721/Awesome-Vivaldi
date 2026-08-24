@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vivaldi AI Title
 // @description  AI-assisted title generation for Vivaldi tabs.
-// @version      2026.5.8
+// @version      2026.7.21
 // @author       PaRr0tBoY
 // ==/UserScript==
 
@@ -9,60 +9,14 @@
 (function () {
   "use strict";
 
-  // ==================== AI Configuration ====================
-  // 1. Fill in apiKey.
-  // 2. Set apiEndpoint to the full chat completions URL.
-  // 3. Adjust model / timeout / maxTokens if needed.
-  // 4. If apiKey is empty, title generation will be skipped.
-  //
-  // Common examples:
-  // GLM: https://open.bigmodel.cn/api/paas/v4/chat/completions
-  // Mimo: https://api.xiaomimimo.com/v1/chat/completions
-  // OpenRouter: https://openrouter.ai/api/v1/chat/completions
-  // DeepSeek: https://api.deepseek.com/chat/completions
-  const AI_CONFIG = {
-    apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
-    apiKey: "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",
-    model: "openrouter/free",
-    timeout: 0,
-    temperature: 0.1,
-    maxTokens: 500,
-  };
-  const MOD_AI_CONFIG_KEY = "tidyTitles";
-  const MOD_AI_CONFIG_FILE = "config.json";
-  const MOD_AI_CONFIG_DIR = ".askonpage";
-
-  function applySharedAiConfig(raw) {
-    const aiRoot = raw?.ai && typeof raw.ai === "object" ? raw.ai : raw || {};
-    const base = aiRoot.default && typeof aiRoot.default === "object" ? aiRoot.default : aiRoot;
-    const override = aiRoot.overrides?.[MOD_AI_CONFIG_KEY] && typeof aiRoot.overrides[MOD_AI_CONFIG_KEY] === "object"
-      ? aiRoot.overrides[MOD_AI_CONFIG_KEY]
-      : {};
-    const source = Object.assign({}, base, override);
-    ["apiEndpoint", "apiKey", "model"].forEach((key) => {
-      if (typeof source[key] === "string") {
-        AI_CONFIG[key] = source[key].trim();
-      }
-    });
-  }
-
-  async function loadSharedAiConfig() {
-    try {
-      const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_AI_CONFIG_DIR, { create: true });
-      const fileHandle = await dir.getFileHandle(MOD_AI_CONFIG_FILE, { create: false });
-      const file = await fileHandle.getFile();
-      applySharedAiConfig(JSON.parse(await file.text()));
-    } catch (_error) {}
-  }
-
-  loadSharedAiConfig();
-  window.addEventListener("vivaldi-mod-ai-config-updated", (event) => {
-    applySharedAiConfig(event.detail || {});
+  VividAI.loadConfig({ modKey: "tidyTitles" });
+  window.addEventListener("vivaldi-mod-ai-config-updated", (e) => {
+    VividAI.applyConfig(e.detail || {});
   });
 
-  // Stack color setting
+  // Stack settings
   let enableStackColor = false;
+  let minStackRenameThreshold = 3;
 
   function applyModSettings(raw) {
     const mods = raw?.mods && typeof raw.mods === "object" ? raw.mods : {};
@@ -70,13 +24,16 @@
     if (typeof tidySeries.enableStackColor === "boolean") {
       enableStackColor = tidySeries.enableStackColor;
     }
+    if (typeof tidySeries.minStackRenameThreshold === "number" && tidySeries.minStackRenameThreshold >= 2) {
+      minStackRenameThreshold = tidySeries.minStackRenameThreshold;
+    }
   }
 
   async function loadModSettings() {
     try {
       const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_AI_CONFIG_DIR, { create: true });
-      const fileHandle = await dir.getFileHandle(MOD_AI_CONFIG_FILE, { create: false });
+      const dir = await root.getDirectoryHandle(".askonpage", { create: true });
+      const fileHandle = await dir.getFileHandle("config.json", { create: false });
       const file = await fileHandle.getFile();
       applyModSettings(JSON.parse(await file.text()));
     } catch (_error) {}
@@ -250,7 +207,7 @@
    * Calls the AI API to generate an optimized title
    */
   async function generateOptimizedTitle(originalTitle, url) {
-    if (!AI_CONFIG.apiKey) {
+    if (!VividAI.config.apiKey) {
       console.warn("[TidyTitles] AI API key not configured, skipping.");
       showToast("AI API key not configured", {
         type: "error",
@@ -289,70 +246,15 @@ Return a response using JSON, according to this schema:
 
 Write responses (but not JSON keys) in ${languageName}.`;
 
-    let timeoutId = null;
-
     try {
-      const isGLM = AI_CONFIG.apiEndpoint?.includes("bigmodel.cn");
-      const payload = {
-        model: AI_CONFIG.model,
+      const data = await VividAI.fetchJSON({
         messages: [{ role: "user", content: prompt }],
-        temperature: AI_CONFIG.temperature,
-        max_tokens: AI_CONFIG.maxTokens,
-        stream: false,
-        response_format: { type: "json_object" },
-      };
-
-      if (isGLM) {
-        payload.thinking = { type: "disabled" };
-      } else if (AI_CONFIG.apiEndpoint?.includes("openrouter.ai")) {
-        payload.include_reasoning = false;
-      }
-
-      console.log(`[TidyTitles] API Request:`, payload);
-
-      const controller =
-        AI_CONFIG.timeout > 0 ? new AbortController() : null;
-      timeoutId =
-        AI_CONFIG.timeout > 0
-          ? setTimeout(() => controller.abort(), AI_CONFIG.timeout)
-          : null;
-
-      const response = await fetch(AI_CONFIG.apiEndpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${AI_CONFIG.apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://github.com/Gershom-Chen/VivaldiModpack",
-          "X-Title": "Vivaldi TidyTitles",
-        },
-        body: JSON.stringify(payload),
-        signal: controller?.signal,
+        temperature: VividAI.config.temperature,
+        maxTokens: VividAI.config.maxTokens,
+        extra: { response_format: { type: "json_object" }, thinking: { type: "disabled" } },
       });
 
-      const data = await response.json();
       console.log(`[TidyTitles] API Response:`, data);
-
-      // Handle common "pseudo-200" errors or non-OK responses
-      if (!response.ok || (data && data.error)) {
-        const status = response.status;
-        const errMsg =
-          data?.error?.message || data?.error || `Status ${status}`;
-
-        // Suppress noisy logs for common issues like 429 or 401
-        if (status === 429) {
-          console.warn(
-            `[TidyTitles] API rate limit reached (429). Skipping for now.`
-          );
-          showToast("API request frequency too high (429)", { type: "warning" });
-        } else {
-          console.error(`[TidyTitles] API error (${status}): ${errMsg}`);
-          showToast(`API error (${status}): ${errMsg}`, {
-            type: "error",
-            copyText: `TidyTitles API error ${status}: ${errMsg}`,
-          });
-        }
-        return originalTitle;
-      }
 
       if (!data || !data.choices || data.choices.length === 0) {
         console.warn(
@@ -400,8 +302,6 @@ Write responses (but not JSON keys) in ${languageName}.`;
         copyText: error.message,
       });
       return originalTitle;
-    } finally {
-      if (typeof timeoutId !== "undefined" && timeoutId) clearTimeout(timeoutId);
     }
   }
 
@@ -729,6 +629,7 @@ Write responses (but not JSON keys) in ${languageName}.`;
   const stackToTabs = new Map(); // stackId → Set<tabId>
   const stackColors = new Map(); // stackId → groupColor
   const TIDY_TABS_STACK_OWNER = "TidyTabs";
+  const STACK_RENAME_DEBOUNCE_MS = 2000;
   const STACK_RENAME_COOLDOWN_MS = 60 * 1000;
 
   function parseVivExtData(raw) {
@@ -902,49 +803,21 @@ ${tabInfo}
 Return JSON: {"name":"the group name"}`;
 
     try {
-      const isGLM = AI_CONFIG.apiEndpoint?.includes("bigmodel.cn");
-      const payload = {
-        model: AI_CONFIG.model,
+      const data = await VividAI.fetchJSON({
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3,
-        max_tokens: 64,
-        stream: false,
-        response_format: { type: "json_object" },
-      };
-      if (isGLM) {
-        payload.thinking = { type: "disabled" };
-      } else if (AI_CONFIG.apiEndpoint?.includes("openrouter.ai")) {
-        payload.include_reasoning = false;
-      }
+        maxTokens: 64,
+        extra: { response_format: { type: "json_object" }, thinking: { type: "disabled" } },
+      });
 
-      const controller = AI_CONFIG.timeout > 0 ? new AbortController() : null;
-      const timeoutId = AI_CONFIG.timeout > 0 ? setTimeout(() => controller.abort(), AI_CONFIG.timeout) : null;
+      if (!data) return null;
 
-      try {
-        const response = await fetch(AI_CONFIG.apiEndpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${AI_CONFIG.apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/Gershom-Chen/VivaldiModpack",
-            "X-Title": "Vivaldi TidyTitles",
-          },
-          body: JSON.stringify(payload),
-          signal: controller?.signal,
-        });
-
-        const data = await response.json();
-        if (!response.ok || data?.error) return null;
-
-        const raw = data.choices?.[0]?.message?.content || "";
-        const cleaned = raw.replace(/<(thought|reasoning)>[\s\S]*?<\/\1>/gi, "").trim();
-        const m = cleaned.match(/\{[\s\S]*?\}/);
-        if (m) {
-          const parsed = JSON.parse(m[0]);
-          if (parsed.name && typeof parsed.name === "string") return parsed.name.trim();
-        }
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId);
+      const raw = data.choices?.[0]?.message?.content || "";
+      const cleaned = raw.replace(/<(thought|reasoning)>[\s\S]*?<\/\1>/gi, "").trim();
+      const m = cleaned.match(/\{[\s\S]*?\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]);
+        if (parsed.name && typeof parsed.name === "string") return parsed.name.trim();
       }
     } catch (e) {
       console.warn("[TidyTitles] Stack name generation failed:", e.message);
@@ -956,7 +829,7 @@ Return JSON: {"name":"the group name"}`;
     if (stackIdsRenaming.has(stackId)) return false;
 
     const tabs = knownTabs || await getTabsInStack(stackId);
-    if (tabs.length < 2) return false;
+    if (tabs.length < minStackRenameThreshold) return false;
 
     console.log(`[TidyTitles] Stack "${stackId}" raw tabs:`, tabs.map(t => ({ id: t.id, url: t.url, title: t.title })));
 
@@ -1022,9 +895,17 @@ Return JSON: {"name":"the group name"}`;
       if (window.vivaldi?.tabsPrivate?.setGroupProperties) {
         try {
           await new Promise((resolve) => {
-            window.vivaldi.tabsPrivate.setGroupProperties({ groupExtId: stackId, groupTitle: name }, () => {
+            const gIdStr = String(stackId);
+            console.log(`[TidyTitles] Calling setGroupProperties({ groupExtId: "${gIdStr}", groupTitle: "${name}" })`);
+            window.vivaldi.tabsPrivate.setGroupProperties({ groupExtId: gIdStr, groupTitle: name }, () => {
+              if (chrome.runtime.lastError) {
+                console.error("[TidyTitles] setGroupProperties for title failed:", chrome.runtime.lastError.message);
+              }
               if (color) {
-                window.vivaldi.tabsPrivate.setGroupProperties({ groupExtId: stackId, groupColor: color }, () => {
+                window.vivaldi.tabsPrivate.setGroupProperties({ groupExtId: gIdStr, groupColor: color }, () => {
+                  if (chrome.runtime.lastError) {
+                    console.error("[TidyTitles] setGroupProperties for color failed:", chrome.runtime.lastError.message);
+                  }
                   resolve();
                 });
               } else {
@@ -1035,6 +916,8 @@ Return JSON: {"name":"the group name"}`;
         } catch (e) {
           console.warn("[TidyTitles] renameStack setGroupProperties threw:", e.message);
         }
+      } else {
+        console.warn("[TidyTitles] vivaldi.tabsPrivate.setGroupProperties NOT available");
       }
 
       console.log(`[TidyTitles] Stack "${name}" (${updated} tabs)${color ? " color=" + color : ""}`);
@@ -1048,7 +931,52 @@ Return JSON: {"name":"the group name"}`;
     }
   }
 
-  function scheduleStackRename(stackId, { withColor = false, requireMissingTitle = false, delay = 500 } = {}) {
+  /**
+   * First AI check: asks AI whether the stack's work content has changed enough
+   * to warrant a rename. Returns true if rename should proceed.
+   */
+  async function shouldRenameStack(stackId, tabs, oldName) {
+    if (!VividAI.config.apiKey) return true; // no API key → skip check, rename directly
+
+    const languageName = getLanguageName(getBrowserLanguage());
+    const tabInfo = tabs.map((t, i) => `${i + 1}. [${getHostname(t.url || "")}] ${t.title || "Untitled"}`).join("\n");
+
+    const prompt = `You are analyzing a browser tab group named "${oldName || 'Untitled'}".
+Determine if the user's work focus has shifted enough to warrant renaming the group.
+
+Current tabs:
+${tabInfo}
+
+Consider:
+- Are the tabs still related to the original group name?
+- Has the primary topic or task changed?
+- Are new tabs from different domains/topics than before?
+
+Return JSON: {"shouldRename": boolean, "reason": "brief explanation in ${languageName}"}`;
+
+    try {
+      const data = await VividAI.fetchJSON({
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        maxTokens: 100,
+        extra: { response_format: { type: "json_object" }, thinking: { type: "disabled" } },
+      });
+
+      const raw = data?.choices?.[0]?.message?.content || "";
+      const cleaned = raw.replace(/<(thought|reasoning)>[\s\S]*?<\/\1>/gi, "").trim();
+      const m = cleaned.match(/\{[\s\S]*?\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]);
+        console.log(`[TidyTitles] AI rename decision for "${stackId}": ${parsed.shouldRename} (${parsed.reason})`);
+        return parsed.shouldRename === true;
+      }
+    } catch (e) {
+      console.warn("[TidyTitles] shouldRenameStack check failed:", e.message);
+    }
+    return true; // on error, default to renaming
+  }
+
+  function scheduleStackRename(stackId, { withColor = false, requireMissingTitle = false, delay = STACK_RENAME_DEBOUNCE_MS } = {}) {
     if (!stackId) return;
     if (stackRenameTimers.has(stackId)) clearTimeout(stackRenameTimers.get(stackId));
 
@@ -1072,11 +1000,11 @@ Return JSON: {"name":"the group name"}`;
 
       const tabs = await getTabsInStack(stackId);
       const count = tabs.length;
-      if (count < 2) return;
+      if (count < minStackRenameThreshold) return;
       if (stackHasTidyTabsOwner(tabs, stackId)) return;
       if (requireMissingTitle && tabs.some(tabHasFixedGroupTitle)) return;
 
-      // 超过 50% 的标签是上次重命名后新出现的，才触发重命名
+      // Check 50% change ratio
       const lastMembers = stackLastRenamedMembers.get(stackId);
       if (lastMembers) {
         const newCount = tabs.filter(t => !lastMembers.has(t.id)).length;
@@ -1085,9 +1013,26 @@ Return JSON: {"name":"the group name"}`;
           console.log(`[TidyTitles] Stack "${stackId}" only ${Math.round(changeRatio * 100)}% new tabs (≤50%), skipping.`);
           return;
         }
-        console.log(`[TidyTitles] Stack "${stackId}" ${Math.round(changeRatio * 100)}% new tabs (>50%), renaming.`);
+        console.log(`[TidyTitles] Stack "${stackId}" ${Math.round(changeRatio * 100)}% new tabs (>50%), checking with AI.`);
       }
 
+      // Phase 1: Ask AI if work content has changed
+      const oldName = getStackDisplayName(tabs, stackId);
+      const hasExplicitName = tabs.some(t => {
+        const viv = parseVivExtData(t?.vivExtData);
+        return typeof viv.fixedGroupTitle === "string" && viv.fixedGroupTitle.trim().length > 0;
+      });
+      if (!hasExplicitName) {
+        console.log(`[TidyTitles] Stack "${stackId}" has no explicit name, skipping AI decision → direct rename.`);
+      } else {
+      const needsRename = await shouldRenameStack(stackId, tabs, oldName);
+      if (!needsRename) {
+        console.log(`[TidyTitles] Stack "${stackId}" AI says no rename needed.`);
+        return;
+      }
+      }
+
+      // Phase 2: Proceed with actual rename
       stackRenamesPending.add(stackId);
       try {
         const renamed = await renameStack(stackId, withColor, tabs);

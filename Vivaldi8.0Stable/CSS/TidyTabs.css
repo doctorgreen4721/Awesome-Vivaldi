@@ -87,11 +87,11 @@
 }
 
 .tab-strip .separator .tidy-tabs-below-button {
-  right: 46px;
+  right: 14px;
 }
 
 .tab-strip .separator .clear-tabs-below-button {
-  right: 14px;
+  right: 46px;
 }
 
 #tabs-container:hover .tidy-tabs-below-button,
@@ -105,6 +105,14 @@
 .clear-tabs-below-button:hover {
   color: var(--colorFg, white) !important;
   background-color: var(--colorFgAlpha, rgba(255, 255, 255, 0.1)) !important;
+}
+
+/* Armed state — second click closes the focused tab and all tab stacks.
+   Clear sits in the LEFT slot (right: 46px) so the wider "Clear All" label
+   grows away from Tidy (right: 14px) instead of overlapping it. */
+.tab-strip .separator .clear-tabs-below-button.is-armed {
+  color: #ff7b72 !important;
+  background-color: rgba(255, 90, 90, 0.14) !important;
 }
 
 /* ============================================ */
@@ -175,18 +183,15 @@
 /* ============================================ */
 
 .tidy-stack-actions {
-  display: inline-flex;
+  display: none;
   align-items: center;
   gap: 2px;
   margin-right: 3px;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s ease;
 }
 
-/* Reserve space: buttons always occupy layout, just transparent when idle */
 .tab-position:hover .tidy-stack-actions {
-  opacity: 1;
+  display: inline-flex;
 }
 
 .tidy-edit-stack-btn,

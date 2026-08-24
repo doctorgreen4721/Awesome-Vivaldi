@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         TidyDownloads
 // @description  Uses chrome.downloads.onDeterminingFilename to dynamically rename downloads.
-// @version      2026.5.7
+// @version      2026.7.25
 // @author       PaRr0tBoY
 // ==/UserScript==
 
 /*
  * Usage:
- * 1. Modify AI_CONFIG below, then adjust CONFIG if needed
+ * 1. Adjust CONFIG if needed (AI config is managed by VividAI.js / ModConfig)
  * 2. Copy to <Vivaldi Dir>/Application/<Version>/resources/vivaldi/
  * 3. Include in window.html: <script src="TidyDownloads.js"></script>
  * 4. Restart Vivaldi
@@ -17,71 +17,25 @@
   "use strict";
 
   // ==================== AI Configuration ====================
-  // 1. Fill in apiKey.
-  // 2. Set apiEndpoint to the full chat completions URL.
-  // 3. Adjust model / timeout / maxTokens if needed.
-  // 4. If apiKey is empty, download renaming will fall back to the original filename.
-  //
-  // Common examples:
-  // GLM: https://open.bigmodel.cn/api/paas/v4/chat/completions
-  // Mimo: https://api.xiaomimimo.com/v1/chat/completions
-  // OpenRouter: https://openrouter.ai/api/v1/chat/completions
-  // DeepSeek: https://api.deepseek.com/chat/completions
-  const AI_CONFIG = {
-    apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
-    apiKey: "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",
-    model: "openrouter/free",
-    timeout: 15000,
-    temperature: 0.1,
-    maxTokens: 1000,
-  };
-  const MOD_AI_CONFIG_KEY = "tidyDownloads";
-  const MOD_AI_CONFIG_FILE = "config.json";
-  const MOD_AI_CONFIG_DIR = ".askonpage";
-
-  function applySharedAiConfig(raw) {
-    const aiRoot = raw?.ai && typeof raw.ai === "object" ? raw.ai : raw || {};
-    const base = aiRoot.default && typeof aiRoot.default === "object" ? aiRoot.default : aiRoot;
-    const override = aiRoot.overrides?.[MOD_AI_CONFIG_KEY] && typeof aiRoot.overrides[MOD_AI_CONFIG_KEY] === "object"
-      ? aiRoot.overrides[MOD_AI_CONFIG_KEY]
-      : {};
-    const source = Object.assign({}, base, override);
-    ["apiEndpoint", "apiKey", "model"].forEach((key) => {
-      if (typeof source[key] === "string") {
-        AI_CONFIG[key] = source[key].trim();
-      }
-    });
-  }
+  // Depends on VividAI.js — shared AI config and API caller
+  VividAI.loadConfig({ modKey: "tidyDownloads" }).then(() => logStartupInfo());
+  window.addEventListener("vivaldi-mod-ai-config-updated", (event) => {
+    VividAI.applyConfig(event.detail || {});
+    logStartupInfo();
+  });
 
   function logStartupInfo() {
     log.info(`========== TidyDownloads Module Starting ==========`);
-    log.info(`API: ${AI_CONFIG.apiEndpoint}`);
-    log.info(`Model: ${AI_CONFIG.model}`);
+    log.info(`API: ${VividAI.config.apiEndpoint}`);
+    log.info(`Model: ${VividAI.config.model}`);
     log.info(`Enabled: ${CONFIG.enabled}`);
     log.info(`Prefer focused tab context: ${CONFIG.preferFocusedTabContext}`);
     log.info(`Skip keywords: ${CONFIG.skipKeywords.join(", ")}`);
     log.info(`Skip extensions: ${CONFIG.skipExtensions.join(", ")}`);
-    if (!AI_CONFIG.apiKey) {
-      log.warn(`Please set AI_CONFIG.apiKey to your API key.`);
+    if (!VividAI.config.apiKey) {
+      log.warn(`Please set VividAI API key in ModConfig.`);
     }
   }
-
-  async function loadSharedAiConfig() {
-    try {
-      const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle(MOD_AI_CONFIG_DIR, { create: true });
-      const fileHandle = await dir.getFileHandle(MOD_AI_CONFIG_FILE, { create: false });
-      const file = await fileHandle.getFile();
-      applySharedAiConfig(JSON.parse(await file.text()));
-    } catch (_error) {}
-    logStartupInfo();
-  }
-
-  loadSharedAiConfig();
-  window.addEventListener("vivaldi-mod-ai-config-updated", (event) => {
-    applySharedAiConfig(event.detail || {});
-    logStartupInfo();
-  });
 
   const showToast = (message, options = {}) => {
     window.VModToast?.show(message, { module: "TidyDownloads", ...options });
@@ -162,22 +116,27 @@
   }
 
   // Arc system prompt (keep in English for AI comprehension)
-  const SYSTEM_PROMPT = `I am downloading a file. Rewrite its filename to be helpful, concise and readable. 2-4 words.
-- Keep informative names mostly the same. For non-informative names, add information from the tab title or website.
-- Remove machine-generated cruft, like IDs, (1), (copy), etc.
-- Clean up messy text, especially dates. Make timestamps concise, human readable, and remove seconds.
+ const SYSTEM_PROMPT = `I am downloading a file. Rename its filename to be helpful, concise and readable. 2-4 words.
+ - IMPORTANT: If the original filename is already clear, descriptive, and human-readable, KEEP IT AS-IS. Only rename files that are messy, cryptic, or meaningless.
+ - IMPORTANT: When the name contains multiple words, ALWAYS use hyphens (-) or underscores (_) as word separators, NEVER use spaces. Examples: 'Tidy-Downloads' or 'Tidy_Downloads', NOT 'Tidy Downloads'.
+ - For non-informative or messy names, add context from the tab title or website.
+ - Remove machine-generated cruft like IDs, (1), (copy), timestamps with seconds, etc.
 - Clean up text casing and letter spacing to make it easier to read.
+ - Preserve original case style for proper nouns and product names.
 
 Some examples, in the form "original name, tab title, domain -> new name"
-- 'Arc-1.6.0-41215.dmg', 'Arc from The Browser Company', 'arc.net' -> 'Arc 1.6.0 41215.dmg' (same info, easier to read)
-- 'swift-chat-main.zip', 'huggingface/swift-chat: Mac app to demonstrate swift-transformers', 'github.com' -> 'swift-chat main.zip' (same info, easier to read)
-- 'folio_option3_6691488.PDF', 'Your Guest Stay Folio from the LINE LA 08-14-23', 'mail.google.com' -> 'Line LA Folio, Aug 14.pdf' (remove ID numbers, make easier to read, add helpful info from tab title)
-- 'image.png', 'Feedback: Card border radius - nateparro2t@gmail.com - Gmail', 'mail.google.com' -> 'Card border radius feedback.png' (remove non-useful words like 'image', add helpful info from tab title)
-- 'Brooklyn_Bridge_September_2022_008.jpg', 'nyc bridges - Google Images', 'images.google.com' -> 'Brooklyn Bridge Sept 2022.jpg' (keep useful information, clean up formatting, remove '008' ID)
-- 'AdobeStock_184679416.jpg', 'ladybug - Google Images', 'images.google.com' -> 'Ladybug.jpg' (add info from title, remove 'AdobeStock' cruft)
-- 'CleanShot 2023-08-17 at 19.51.05@2x.png', 'dogfooding - The Browser Company - Slack', 'app.slack.com' -> 'CleanShot Aug 17 from dogfooding.png' (keep useful info, trim date, add source from title)
-- 'Screenshot 2023-09-26 at 11.12.18 PM', 'DM with Nate - Twitter', 'twitter.com' -> 'Sept 26 Screenshot from Nate.png' (keep useful info, trim date, add source from title)
-- 'image0.png', 'Nate - Slack', 'files.slack.com' -> 'Image from Nate via Slack.png' (add info from title, add useful context from title)
+- 'document.pdf', 'Q3 Financial Report - Company', 'company.com' -> 'Q3-Financial-Report.pdf' (generic name, add context from tab, use hyphens)
+- 'My-Project-Report-v2.docx', 'Some Random Page', 'example.com' -> 'My-Project-Report-v2.docx' (already clear, keep as-is)
+- 'TidyDownloads.js', 'GitHub - repo', 'github.com' -> 'TidyDownloads.js' (already clear, keep as-is)
+- 'image.png', 'Feedback: Card border radius - nateparro2t@gmail.com - Gmail', 'mail.google.com' -> 'Card-Border-Radius-Feedback.png' (remove generic 'image', add context from tab, use hyphens)
+- 'folio_option3_6691488.PDF', 'Your Guest Stay Folio from the LINE LA 08-14-23', 'mail.google.com' -> 'Line-LA-Folio-Aug14.pdf' (remove ID, make readable, use hyphens)
+- 'Brooklyn_Bridge_September_2022_008.jpg', 'nyc bridges - Google Images', 'images.google.com' -> 'Brooklyn-Bridge-Sept-2022.jpg' (keep useful info, clean up, remove ID, use hyphens)
+- 'AdobeStock_184679416.jpg', 'ladybug - Google Images', 'images.google.com' -> 'Ladybug.jpg' (remove cruft, add info from title)
+- 'CleanShot 2023-08-17 at 19.51.05@2x.png', 'dogfooding - The Browser Company - Slack', 'app.slack.com' -> 'CleanShot-Aug17-Dogfooding.png' (keep useful info, trim date, add source, use hyphens)
+- 'Screenshot 2023-09-26 at 11.12.18 PM', 'DM with Nate - Twitter', 'twitter.com' -> 'Sept26-Screenshot-Nate.png' (keep useful info, trim date, add source, use hyphens)
+- 'image0.png', 'Nate - Slack', 'files.slack.com' -> 'Image-Nate-Slack.png' (add info from title, add context, use hyphens)
+- 'Arc-1.6.0-41215.dmg', 'Arc from The Browser Company', 'arc.net' -> 'Arc-1.6.0-41215.dmg' (already readable, keep as-is)
+- 'swift-chat-main.zip', 'huggingface/swift-chat: Mac app to demonstrate swift-transformers', 'github.com' -> 'swift-chat-main.zip' (already readable, keep as-is)
 
 Return a response using JSON, according to this schema:
 \`\`\`
@@ -189,7 +148,7 @@ Write responses (but not JSON keys) in English.`;
 
   // ---------- AI Request ----------
   async function fetchAiRename({ filename, tabTitle, hostname }) {
-    if (!CONFIG.enabled || !AI_CONFIG.apiKey) return null;
+    if (!CONFIG.enabled || !VividAI.config.apiKey) return null;
     if (
       CONFIG.skipKeywords.some(
         (kw) => filename.includes(kw) || hostname?.includes(kw)
@@ -201,79 +160,28 @@ Write responses (but not JSON keys) in English.`;
 
     const userMsg = buildUserMessage({ filename, tabTitle, hostname });
 
-    const body = {
-      temperature: AI_CONFIG.temperature,
-      max_tokens: AI_CONFIG.maxTokens,
-      stream: true,
-      model: AI_CONFIG.model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userMsg },
-      ],
-      // Arc-style: text instead of json_object, parse JSON manually
-      response_format: { type: "text" },
-      stream_options: { include_usage: true },
-    };
-
-    log.debug(`AI request body:`, body);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), AI_CONFIG.timeout);
+    log.debug(`AI request: ${filename} → ${tabTitle} (${hostname})`);
 
     try {
-      const response = await fetch(AI_CONFIG.apiEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${AI_CONFIG.apiKey}`,
+      const { text } = await VividAI.streamChat({
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userMsg },
+        ],
+        temperature: VividAI.config.temperature,
+        maxTokens: VividAI.config.maxTokens,
+        timeout: VividAI.config.timeout,
+        extra: {
+          response_format: { type: "text" },
+          stream_options: { include_usage: true },
+          thinking: { type: "disabled" },
         },
-        body: JSON.stringify(body),
-        signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const text = await response.text();
-        log.error(`AI API error ${response.status}: ${text}`);
-        showToast(`AI API error (${response.status})`, {
-          type: "error",
-          copyText: `TidyDownloads API error ${response.status}: ${text}`,
-        });
-        return null;
-      }
-
-      // Stream reading
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") continue;
-
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) fullText += content;
-          } catch {
-            // Ignore parse failures
-          }
-        }
-      }
-
-      log.debug(`AI raw response: ${fullText}`);
+      log.debug(`AI raw response: ${text}`);
 
       // Extract newName
-      const match = /"newName"\s*:\s*"([^"]+)"/.exec(fullText);
+      const match = /"newName"\s*:\s*"([^"]+)"/.exec(text);
       if (match) {
         const newName = match[1].trim();
         // Preserve original extension
@@ -285,13 +193,12 @@ Write responses (but not JSON keys) in English.`;
         return newName;
       }
 
-      log.warn(`Could not extract newName from AI response: ${fullText}`);
+      log.warn(`Could not extract newName from AI response: ${text}`);
       return null;
     } catch (err) {
-      clearTimeout(timeoutId);
       if (err.name === "AbortError") {
-        log.error(`AI request timeout (${AI_CONFIG.timeout}ms)`);
-        showToast(`AI request timeout (${AI_CONFIG.timeout}ms)`, { type: "warning" });
+        log.error(`AI request timeout (${VividAI.config.timeout}ms)`);
+        showToast(`AI request timeout (${VividAI.config.timeout}ms)`, { type: "warning" });
       } else {
         log.error(`AI request failed: ${err.message}`);
         showToast(`AI request failed: ${err.message}`, {
