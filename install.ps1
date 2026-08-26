@@ -1515,7 +1515,10 @@ function Deploy-ModFiles {
 		}
 	}
 	foreach ($known in $Script:ModJsFiles) {
-		if ($known -eq "ModConfig.js") { continue }  # always keep core
+		# Keep every core module (ModConfig / VividAI / VividMarkdown) — they are
+		# always deployed, so deleting them here only opens a window where the
+		# loader could pick up a half-populated user_mods\JS.
+		if ($Script:SilentInstall -contains [IO.Path]::GetFileNameWithoutExtension($known)) { continue }
 		$existing = Join-Path $userJsDir $known
 		if (Test-Path $existing) {
 			Remove-Item $existing -Force -ErrorAction SilentlyContinue

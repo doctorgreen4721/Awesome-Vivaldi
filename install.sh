@@ -388,6 +388,18 @@ is_default_off() {
     esac
 }
 
+# ── Core JS modules ───────────────────────────────────────────
+# Shared dependencies: always deployed, never offered in the mod picker.
+# Single source of truth — the scanner, the deploy cleanup, the install
+# summary and the manage diff all go through is_core_js(). Hardcoding a
+# subset of this list anywhere else makes the manage diff report the
+# missing entries as "removed" on every run.
+CORE_JS_MODS="ModConfig.js VividAI.js VividMarkdown.js"
+
+is_core_js() {
+    case " $CORE_JS_MODS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
 # ============================================================
 #  2.  ASCII Banner
 # ============================================================
@@ -836,7 +848,7 @@ scan_mods() {
     STANDALONE_CSS=(); BUNDLED_CSS=(); STANDALONE_JS=(); BUNDLED_JS=()
     local css_names=(); local js_names=()
     if [ -d "$css_dir" ]; then for f in "$css_dir"/*.css; do [ -f "$f" ] && css_names+=("$(basename "$f" .css)"); done; fi
-    if [ -d "$js_dir" ]; then for f in "$js_dir"/*.js; do [ -f "$f" ] || continue; local n="$(basename "$f")"; [ "$n" = "ModConfig.js" ] && continue; [ "$n" = "VividAI.js" ] && continue; [ "$n" = "VividMarkdown.js" ] && continue; js_names+=("$(basename "$f" .js)"); done; fi
+    if [ -d "$js_dir" ]; then for f in "$js_dir"/*.js; do [ -f "$f" ] || continue; local n="$(basename "$f")"; is_core_js "$n" && continue; js_names+=("$(basename "$f" .js)"); done; fi
     local bundled_keys=()
     # bash 3.2 set -u: ${arr[@]} on an empty array = unbound variable
     if [ "${#css_names[@]}" -gt 0 ] && [ "${#js_names[@]}" -gt 0 ]; then
@@ -850,7 +862,7 @@ scan_mods() {
         else STANDALONE_CSS+=("$name|$base"); fi; done
     [ "${#STANDALONE_CSS[@]}" -gt 0 ] && { IFS=$'\n'; STANDALONE_CSS=($(sort <<<"${STANDALONE_CSS[*]}")); unset IFS; }
     [ "${#BUNDLED_CSS[@]}" -gt 0 ]    && { IFS=$'\n'; BUNDLED_CSS=($(sort <<<"${BUNDLED_CSS[*]}")); unset IFS; }
-    for f in "$js_dir"/*.js; do [ -f "$f" ] || continue; local name="$(basename "$f")"; local base="${name%.js}"; [ "$name" = "ModConfig.js" ] && continue; [ "$name" = "VividAI.js" ] && continue; [ "$name" = "VividMarkdown.js" ] && continue
+    for f in "$js_dir"/*.js; do [ -f "$f" ] || continue; local name="$(basename "$f")"; local base="${name%.js}"; is_core_js "$name" && continue
         if _is_bundled "$base"; then BUNDLED_JS+=("$name|$base|${name%.js}.css")
         else STANDALONE_JS+=("$name|$base|"); fi; done
     [ "${#STANDALONE_JS[@]}" -gt 0 ]  && { IFS=$'\n'; STANDALONE_JS=($(sort <<<"${STANDALONE_JS[*]}")); unset IFS; }
@@ -1158,7 +1170,7 @@ deploy_mod_files() {
     for f in "$user_js_dir"/*.js; do
         [ -f "$f" ] || continue
         local bn; bn="$(basename "$f")"
-        [ "$bn" = "ModConfig.js" ] && continue; [ "$bn" = "VividAI.js" ] && continue; [ "$bn" = "VividMarkdown.js" ] && continue
+        is_core_js "$bn" && continue
         [ -f "$source_js_dir/$bn" ] && { rm -f "$f"; cleaned=$((cleaned + 1)); }
     done
     # Clean up renamed/removed mods that no longer exist in source
@@ -1464,7 +1476,10 @@ install_flow() {
                     case "$line" in JS:*) jjs="$jjs ${line#JS:}" ;; CSS:*) jcss="$jcss ${line#CSS:}" ;; esac
                 done <<< "$selected_js_result"
                 final_css="$(echo "$selected_css $jcss" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
-                final_js="ModConfig.js VividAI.js VividMarkdown.js $(echo "$jjs" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
+                # User-picked JS only — the summary reports these; core modules
+                # are appended for deployment but never presented as choices.
+                local picked_js; picked_js="$(echo "$jjs" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
+                final_js="$CORE_JS_MODS $picked_js"
 
                 set_step_info 2 "$total_pages" "$step_labels"
                 PAGES_CONFIRMED=("${pages_confirmed[@]}")
@@ -1476,10 +1491,9 @@ install_flow() {
                     sb+="  ${e}[1m$(tr summary_title)${e}[0m"$'\n'; sb+=""$'\n'
                     sb+="  $(tr summary_target): $app_path"$'\n'
                     local css_count; css_count="$(echo "$final_css" | wc -w | command tr -d ' ')"
-                    local js_count; js_count="$(echo "$final_js" | wc -w | command tr -d ' ')"
-                    js_count=$((js_count - 3))  # exclude ModConfig.js, VividAI.js, VividMarkdown.js
+                    local js_count; js_count="$(echo "$picked_js" | wc -w | command tr -d ' ')"
                     sb+="  ${e}[32m$(tr summary_css_mods) ($css_count)${e}[0m: $(echo "$final_css" | sed 's/\.css//g')"$'\n'
-                    sb+="  ${e}[32m$(tr summary_js_mods) ($js_count)${e}[0m: $(echo "$final_js" | sed 's/\.js//g')"$'\n'
+                    sb+="  ${e}[32m$(tr summary_js_mods) ($js_count)${e}[0m: $(echo "$picked_js" | sed 's/\.js//g')"$'\n'
                     sb+=""$'\n'
                     sb+="  ${e}[90m──────────────────────────────────────────────────${e}[0m"$'\n'
                     sb+="    ${e}[90m$(tr confirm_deploy_hint)${e}[0m"$'\n'
@@ -1571,7 +1585,7 @@ manage_flow() {
                     case "$line" in JS:*) jjs="$jjs ${line#JS:}" ;; CSS:*) jcss="$jcss ${line#CSS:}" ;; esac
                 done <<< "$selected_js_result"
                 local final_css; final_css="$(echo "$selected_css $jcss" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
-                local final_js="ModConfig.js VividAI.js VividMarkdown.js $(echo "$jjs" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
+                local final_js="$CORE_JS_MODS $(echo "$jjs" | command tr ' ' '\n' | sort -u | command tr '\n' ' ' | sed 's/^ *//;s/ *$//')"
 
                 local new_css=""; local removed_css=""; local unchanged_css=""
                 # bash 3.2 compat: guard array expansions against empty arrays + set -u
@@ -1584,7 +1598,7 @@ manage_flow() {
                 local new_js=""; local removed_js=""; local unchanged_js=""
                 if [ "${#STATE_JS_MODS[@]}" -gt 0 ]; then
                     for m in $jjs; do [[ " ${STATE_JS_MODS[*]} " =~ " $m " ]] && unchanged_js+="$m " || new_js+="$m "; done
-                    for m in "${STATE_JS_MODS[@]}"; do [ "$m" = "ModConfig.js" ] && continue; [[ " $jjs " =~ " $m " ]] || removed_js+="$m "; done
+                    for m in "${STATE_JS_MODS[@]}"; do is_core_js "$m" && continue; [[ " $jjs " =~ " $m " ]] || removed_js+="$m "; done
                 else
                     new_js="$jjs"  # All JS are new if nothing installed
                 fi
@@ -1724,7 +1738,7 @@ do_update() {
     for mod in $chosen_css; do [ -z "$mod" ] && continue; [ -f "$source_css_dir/$mod" ] && { cp "$source_css_dir/$mod" "$user_css_dir/$mod"; echo "  ${e}[32m[$(tr update_updated_mod)]${e}[0m $mod"; updated=$((updated + 1)); }; done
     for mod in $chosen_js; do [ -z "$mod" ] && continue; [ -f "$source_js_dir/$mod" ] && { cp "$source_js_dir/$mod" "$user_js_dir/$mod"; echo "  ${e}[32m[$(tr update_updated_mod)]${e}[0m $mod"; updated=$((updated + 1)); }; done
     # Always deploy core modules (they may not be in old state files)
-    for core in "ModConfig.js" "VividAI.js" "VividMarkdown.js"; do
+    for core in $CORE_JS_MODS; do
         [ -f "$source_js_dir/$core" ] && { cp "$source_js_dir/$core" "$user_js_dir/$core"; echo "  ${e}[32m[$(tr update_updated_mod)]${e}[0m $core"; updated=$((updated + 1)); }
     done
     # Update Import.css (match PS1: rewrites @import paths)
