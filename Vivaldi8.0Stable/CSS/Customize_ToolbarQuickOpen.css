@@ -1,33 +1,79 @@
-/* ========== Toolbar Lock for Auto-hide Prevention ========== */
+/* ==========================================================================
+   ToolbarQuickOpen — auto-hide interaction fix
+   ==========================================================================
 
-/* 工具栏锁定状态：强制保持可见 */
-.toolbar-mainbar.toolbar-locked-by-dropdown,
-.toolbar-mainbar[data-dropdown-open="true"] {
-    opacity: 1 !important;
-    transform: translateY(0) !important;
-    visibility: visible !important;
+   问题根源（已用真实鼠标输入 + 远程调试实测确认）：
+
+   Vivaldi 在自动隐藏工具栏处于「已展开」状态时，会给整个
+   .auto-hide-wrapper 打上 app-region: drag（见 common.css:
+   `#browser.auto-hide .auto-hide-wrapper.show:not(:has(.OmniDropdown,
+   .CustomizePanelPopup, ~ .extension-popup, ~ .button-popup))`），
+   即把整条工具栏连同里面的元素都声明成「操作系统级窗口拖拽区域」。
+
+   本 mod 的下拉菜单是这个 wrapper 的后代，于是菜单项也继承了 drag。
+   结果是当指针落在菜单上时，命中测试返回的是「标题栏/拖拽区」，
+   鼠标事件根本不会送到渲染进程：
+
+     · 窗口模式：指针离开工具栏条带后，要等 Vivaldi 的自动隐藏
+       状态机把 .show 摘掉（实测 0.5–2.5s），拖拽区才消失，
+       高亮和点击才会生效 —— 这就是“卡顿 1-2s”。
+     · 全屏模式：指针停在第一项时（第一项与工具栏条带的 y 范围重叠）
+       原生热区一直认为指针还在工具栏内，.show 永不摘除，
+       于是第一项永远不亮、也点不动 —— 必须先移到第二/三项
+       （y 在条带之外）才解除。
+
+   修法：菜单打开期间把 wrapper（以及菜单自身）从拖拽区里挖出来，
+   并用纯 CSS 把 wrapper 钉在原位 —— 取代旧 JS 里
+   MutationObserver + setInterval(50ms) 反复写内联 transform 的做法。
+
+   `.auto-hide-wrapper:not(.show) { pointer-events: none }` 同样由这里
+   覆盖，保证 .show 被摘掉后菜单依然可交互。
+   ========================================================================== */
+
+/* 菜单打开期间：保持原位、可交互、非拖拽区 */
+.auto-hide-wrapper:has(.vivaldi-toolbar-dropdown-menu[data-visible="true"]) {
     pointer-events: auto !important;
+    -webkit-app-region: no-drag !important;
+    app-region: no-drag !important;
+    /* 其它 auto-hide wrapper（右侧标签栏、面板、状态栏）同样是 z-index: 5，
+       DOM 顺序靠后的会盖在菜单上面；抬高一层保证菜单始终在最上层 */
+    z-index: 6 !important;
 }
 
-/* 保留下拉菜单打开时的阴影效果 */
-.auto-hide-wrapper:has(.toolbar-mainbar[data-dropdown-open="true"]) {
+.auto-hide-wrapper.top:has(.vivaldi-toolbar-dropdown-menu[data-visible="true"]),
+.auto-hide-wrapper.bottom:has(.vivaldi-toolbar-dropdown-menu[data-visible="true"]) {
+    transform: translateY(0) !important;
+}
+
+.auto-hide-wrapper.left:has(.vivaldi-toolbar-dropdown-menu[data-visible="true"]),
+.auto-hide-wrapper.right:has(.vivaldi-toolbar-dropdown-menu[data-visible="true"]) {
+    transform: translateX(0) !important;
+}
+
+/* 双保险：菜单自身及其子元素永远不属于窗口拖拽区域 */
+.vivaldi-toolbar-dropdown-menu,
+.vivaldi-toolbar-dropdown-menu * {
+    -webkit-app-region: no-drag !important;
+    app-region: no-drag !important;
+}
+
+/* 菜单打开时保留投影（原来的 [data-dropdown-open] 规则已随 JS 锁定逻辑移除） */
+.auto-hide-wrapper:has(.vivaldi-toolbar-dropdown-menu[data-visible="true"]) {
     box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px,
                 rgba(0, 0, 0, 0.3) 0px 3px 10px 0px !important;
 }
 
-/* 扩展工具栏的悬停检测区域，覆盖下拉菜单 */
-.toolbar-mainbar[data-dropdown-open="true"]::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 100%;
-    height: 300px;
-    pointer-events: auto;
-    z-index: 9999;
-}
+/* ==========================================================================
+   Dropdown menu
+   ========================================================================== */
 
-/* 确保下拉菜单在扩展区域之上 */
 .vivaldi-toolbar-dropdown-menu {
     z-index: 10000 !important;
+}
+
+/* 选中高亮用 CSS :hover 表达：
+   即使某个时刻没有产生 mouseover 事件（例如菜单恰好在静止的指针下展开），
+   :hover 也会在样式重算时生效，避免“第一项不亮”。 */
+.vivaldi-toolbar-dropdown-item:hover {
+    background-color: var(--colorBgIntense) !important;
 }

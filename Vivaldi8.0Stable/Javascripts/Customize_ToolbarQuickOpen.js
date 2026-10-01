@@ -123,7 +123,8 @@
 
     // ========== Dropdown Menu Creation ==========
 
-    var clickOutsideListener = null;
+    // 当前打开的菜单（用于 Escape 关闭；成对开关，不存在跨实例覆盖问题）
+    var activeDropdown = null;
 
     // URL validation helper
     function isSafeURL(url) {
@@ -160,7 +161,9 @@
             { label: '重启 Vivaldi', svg: SVG_RESTART, action: 'restart' }
         ];
 
-        // Use event delegation for hover effects to prevent memory leaks
+        // 高亮主机制在 CSS（.vivaldi-toolbar-dropdown-item:hover），
+        // 这里的委托监听作为备份：两者颜色一致，同时生效也不会冲突。
+        // 详见 Customize_ToolbarQuickOpen.css 顶部的说明。
         dropdown.addEventListener('mouseover', function(e) {
             var item = e.target.closest('.vivaldi-toolbar-dropdown-item');
             if (item) {
@@ -242,128 +245,51 @@
     }
 
     function openDropdown(dropdown, button) {
-        dropdown.style.display = 'block';
+        // data-visible 同时驱动 CSS：钉住 auto-hide wrapper + 移出窗口拖拽区
+        activeDropdown = dropdown;
         dropdown.dataset.visible = 'true';
-
-        // 锁定工具栏，防止自动隐藏
-        lockToolbar();
+        dropdown.style.display = 'block';
 
         // Use requestAnimationFrame to avoid race condition
-        // Store button/dropdown references in closure to avoid stale DOM queries
+        // 监听器引用挂在 dropdown 实例上（而不是模块级单例）：
+        // 工具栏重建会让旧 dropdown 被 detach 且不走 closeDropdown，
+        // 模块级单例会被新监听器覆盖，导致旧监听器误删新监听器并泄漏。
         requestAnimationFrame(function() {
-            clickOutsideListener = function(e) {
-                if (!button || !dropdown) return;
+            if (dropdown.dataset.visible !== 'true') return;   // 双击/极快开关的幽灵注册防护
 
+            var listener = function(e) {
+                if (!dropdown.isConnected) {                   // 节点已随重建移除：自清理
+                    document.removeEventListener('click', listener, true);
+                    return;
+                }
                 if (!button.contains(e.target) && !dropdown.contains(e.target)) {
                     closeDropdown(dropdown);
                 }
             };
-            document.addEventListener('click', clickOutsideListener, true);
+
+            dropdown._outsideListener = listener;
+            document.addEventListener('click', listener, true);
         });
     }
 
     function closeDropdown(dropdown) {
-        dropdown.style.display = 'none';
+        if (activeDropdown === dropdown) {
+            activeDropdown = null;
+        }
         dropdown.dataset.visible = 'false';
+        dropdown.style.display = 'none';
 
-        // 解锁工具栏，恢复自动隐藏
-        unlockToolbar();
-
-        // Remove click-outside listener
-        if (clickOutsideListener) {
-            document.removeEventListener('click', clickOutsideListener, true);
-            clickOutsideListener = null;
-        }
-    }
-
-    // ========== Toolbar Lock/Unlock for Auto-hide Prevention ==========
-
-    var toolbarLockObserver = null;
-    var isToolbarLocked = false;
-
-    function lockToolbar() {
-        var toolbar = document.querySelector('.toolbar-mainbar');
-        if (!toolbar) return;
-
-        // Find the auto-hide-wrapper container (this is what Vivaldi actually animates)
-        var autoHideWrapper = toolbar.closest('.auto-hide-wrapper');
-        if (!autoHideWrapper) {
-            console.warn('[ToolbarQuickOpen] .auto-hide-wrapper not found');
-            return;
+        // 清掉 JS 委托高亮留下的内联背景，避免下次打开出现“假高亮”
+        var items = dropdown.querySelectorAll('.vivaldi-toolbar-dropdown-item');
+        for (var i = 0; i < items.length; i++) {
+            items[i].style.background = '';
         }
 
-        isToolbarLocked = true;
-        toolbar.classList.add('toolbar-locked-by-dropdown');
-        toolbar.setAttribute('data-dropdown-open', 'true');
-
-        // Force the auto-hide-wrapper to be visible
-        forceWrapperVisible(autoHideWrapper);
-
-        // Create MutationObserver to prevent Vivaldi from hiding the wrapper
-        if (!toolbarLockObserver) {
-            toolbarLockObserver = new MutationObserver(function(mutations) {
-                if (!isToolbarLocked) return;
-
-                mutations.forEach(function(mutation) {
-                    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                        // Re-force visibility if Vivaldi tries to hide it
-                        forceWrapperVisible(autoHideWrapper);
-                    }
-                });
-            });
-
-            toolbarLockObserver.observe(autoHideWrapper, {
-                attributes: true,
-                attributeFilter: ['style']
-            });
+        // Remove click-outside listener (per-instance reference)
+        if (dropdown._outsideListener) {
+            document.removeEventListener('click', dropdown._outsideListener, true);
+            dropdown._outsideListener = null;
         }
-
-        // Also use setInterval as a backup to continuously enforce visibility
-        if (!window.toolbarLockInterval) {
-            window.toolbarLockInterval = setInterval(function() {
-                if (isToolbarLocked) {
-                    var tb = document.querySelector('.toolbar-mainbar');
-                    if (tb) {
-                        var wrapper = tb.closest('.auto-hide-wrapper');
-                        if (wrapper) forceWrapperVisible(wrapper);
-                    }
-                }
-            }, 50); // Check every 50ms
-        }
-    }
-
-    function unlockToolbar() {
-        var toolbar = document.querySelector('.toolbar-mainbar');
-        if (toolbar) {
-            toolbar.classList.remove('toolbar-locked-by-dropdown');
-            toolbar.removeAttribute('data-dropdown-open');
-
-            // Remove forced styles from wrapper
-            var autoHideWrapper = toolbar.closest('.auto-hide-wrapper');
-            if (autoHideWrapper) {
-                autoHideWrapper.style.removeProperty('transform');
-            }
-        }
-
-        isToolbarLocked = false;
-
-        // Disconnect observer
-        if (toolbarLockObserver) {
-            toolbarLockObserver.disconnect();
-            toolbarLockObserver = null;
-        }
-
-        // Clear interval
-        if (window.toolbarLockInterval) {
-            clearInterval(window.toolbarLockInterval);
-            window.toolbarLockInterval = null;
-        }
-    }
-
-    function forceWrapperVisible(wrapper) {
-        // Force transform to 0 to keep the toolbar visible
-        // Vivaldi uses transform: translateY(-87px) to hide it
-        wrapper.style.setProperty('transform', 'translateY(0)', 'important');
     }
 
     // ========== Toolbar Button Injection ==========
@@ -443,18 +369,36 @@
     function init() {
         injectToolbarButton();
 
-        // Watch for toolbar rebuilds with loop protection
-        var toolbar = document.querySelector('.toolbar-mainbar') || document.getElementById('browser');
-        if (toolbar) {
+        // Escape 关闭菜单：菜单打开期间 auto-hide wrapper 被 CSS 钉住，
+        // 必须保证有一条不依赖“点到 UI 上”的关闭通道（点网页内容时，
+        // 事件进入 webview 的 guest 进程，browser UI 的 document 收不到 click）。
+        if (!window.__toolbarQuickOpenKeyHandler) {
+            window.__toolbarQuickOpenKeyHandler = true;
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && activeDropdown) {
+                    closeDropdown(activeDropdown);
+                }
+            }, true);
+        }
+
+        // Watch for toolbar rebuilds with loop protection.
+        // 观察 #browser（窗口生命周期内稳定）而不是 .toolbar-mainbar：
+        // 若 Vivaldi 整体替换 mainbar 节点，绑定在旧节点上的观察者会永久哑火。
+        var host = document.getElementById('browser') || document.querySelector('.toolbar-mainbar');
+        if (host) {
+            if (observer) observer.disconnect();
             observer = new MutationObserver(function() {
                 if (injectionInProgress) return;
                 injectionInProgress = true;
                 setTimeout(function() {
-                    injectToolbarButton();
-                    injectionInProgress = false;
+                    try {
+                        injectToolbarButton();
+                    } finally {
+                        injectionInProgress = false;
+                    }
                 }, 0);
             });
-            observer.observe(toolbar, {
+            observer.observe(host, {
                 childList: true,
                 subtree: true
             });
